@@ -6,7 +6,6 @@ import {
   Phone, X, Clock, Pencil, AlertTriangle, CheckCircle2, Loader2, BarChart3, Mic, MicOff, UserX, FileSpreadsheet
 } from 'lucide-react';
 
-
 /* ---------- constants & helpers ---------- */
 
 const WEEKDAY_LABELS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie'];
