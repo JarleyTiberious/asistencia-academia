@@ -383,7 +383,13 @@ export default function App() {
     return { onTime, late, absent };
   }
 
-  /* ---- resumen tab ---- */
+ /* ---- resumen tab ---- */
+  const resumenDates = useMemo(() => getWeekdayDatesInMonth(resumenMonth), [resumenMonth]);
+  const resumenStudents = useMemo(() => {
+    return students.filter(s => resumenTeacherFilter === 'all' || s.teacherId === resumenTeacherFilter);
+  }, [students, resumenTeacherFilter]);
+  const resumenRecords = monthCache[resumenMonth] || {};
+
   const absencesByDate = useMemo(() => resumenDates.map(date => {
     let count = 0;
     resumenStudents.forEach(s => {
