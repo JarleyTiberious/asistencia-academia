@@ -395,7 +395,8 @@ export default function App() {
     resumenStudents.forEach(s => {
       const entry = s.schedule.find(e => e.day === date.weekdayIndex);
       if (!entry) return;
-      const status = computeStatus(resumenRecords[`${s.id}__${date.iso}`], entry.slot.split('-')[0], date.iso);
+      const record = resumenRecords[`${s.id}__${date.iso}`];
+      const status = computeStatus(record, entry.slot.split('-')[0], date.iso);
       if (status === 'ausente') count++;
     });
     return { ...date, count };
@@ -414,7 +415,8 @@ export default function App() {
       resumenStudents.forEach(s => {
         const entry = s.schedule.find(e => e.day === date.weekdayIndex);
         if (!entry || entry.slot !== slot) return;
-        const status = computeStatus(resumenRecords[`${s.id}__${date.iso}`], entry.slot.split('-')[0], date.iso);
+        const record = resumenRecords[`${s.id}__${date.iso}`];
+        const status = computeStatus(record, entry.slot.split('-')[0], date.iso);
         if (status === 'ausente') count++;
       });
     });
