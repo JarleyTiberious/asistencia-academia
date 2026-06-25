@@ -158,8 +158,8 @@ export default function App() {
     setLoading(true);
     try {
       const [t, s] = await Promise.all([
-        window.storage.get('teachers').catch(() => null),
-        window.storage.get('students').catch(() => null),
+        window.storage.get('teachers', false).catch(() => null),
+        window.storage.get('students', false).catch(() => null),
       ]);
       setTeachers(t ? JSON.parse(t.value) : []);
       setStudents(s ? JSON.parse(s.value) : []);
@@ -172,20 +172,20 @@ export default function App() {
 
   async function persistTeachers(next) {
     setTeachers(next);
-    try { await window.storage.set('teachers', JSON.stringify(next)); }
+    try { await window.storage.set('teachers', JSON.stringify(next), false); }
     catch (e) { setError('No se pudo guardar la lista de profes.'); }
   }
 
   async function persistStudents(next) {
     setStudents(next);
-    try { await window.storage.set('students', JSON.stringify(next)); }
+    try { await window.storage.set('students', JSON.stringify(next), false); }
     catch (e) { setError('No se pudo guardar la lista de alumnos.'); }
   }
 
   async function getMonth(yyyymm) {
     if (monthCache[yyyymm]) return monthCache[yyyymm];
     try {
-      const res = await window.storage.get(`attendance:${yyyymm}`);
+      const res = await window.storage.get(`attendance:${yyyymm}`, false);
       const data = res ? JSON.parse(res.value) : {};
       setMonthCache(prev => ({ ...prev, [yyyymm]: data }));
       return data;
@@ -197,7 +197,7 @@ export default function App() {
 
   async function saveMonth(yyyymm, data) {
     setMonthCache(prev => ({ ...prev, [yyyymm]: data }));
-    try { await window.storage.set(`attendance:${yyyymm}`, JSON.stringify(data)); }
+    try { await window.storage.set(`attendance:${yyyymm}`, JSON.stringify(data), false); }
     catch (e) { setError('No se pudo guardar la asistencia.'); }
   }
 
@@ -384,19 +384,12 @@ export default function App() {
   }
 
   /* ---- resumen tab ---- */
-  const resumenDates = useMemo(() => getWeekdayDatesInMonth(resumenMonth), [resumenMonth]);
-  const resumenStudents = useMemo(() => {
-    return students.filter(s => resumenTeacherFilter === 'all' || s.teacherId === resumenTeacherFilter);
-  }, [students, resumenTeacherFilter]);
-  const resumenRecords = monthCache[resumenMonth] || {};
-
   const absencesByDate = useMemo(() => resumenDates.map(date => {
     let count = 0;
     resumenStudents.forEach(s => {
       const entry = s.schedule.find(e => e.day === date.weekdayIndex);
       if (!entry) return;
-      const record = resumenRecords[`${s.id}__${date.iso}`];
-      const status = computeStatus(record, entry.slot.split('-')[0], date.iso);
+      const status = computeStatus(resumenRecords[`${s.id}__${date.iso}`], entry.slot.split('-')[0], date.iso);
       if (status === 'ausente') count++;
     });
     return { ...date, count };
@@ -415,8 +408,7 @@ export default function App() {
       resumenStudents.forEach(s => {
         const entry = s.schedule.find(e => e.day === date.weekdayIndex);
         if (!entry || entry.slot !== slot) return;
-        const record = resumenRecords[`${s.id}__${date.iso}`];
-        const status = computeStatus(record, entry.slot.split('-')[0], date.iso);
+        const status = computeStatus(resumenRecords[`${s.id}__${date.iso}`], entry.slot.split('-')[0], date.iso);
         if (status === 'ausente') count++;
       });
     });
@@ -498,6 +490,16 @@ export default function App() {
     setInfo('Excel del mes completo descargado.');
   }
 
+  if (!isClient) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', fontFamily: "'Montserrat', sans-serif", background: '#0F172A' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: '#94A3B8', fontSize: 14 }}>
+          <Loader2 size={24} className="ap-spin" /> Iniciando interfaz adaptable...
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div style={{ fontFamily: "'Montserrat', sans-serif", background: '#0F172A', minHeight: '100vh', color: '#F8FAFC', paddingBottom: 80 }}>
       <style>{`
@@ -506,6 +508,7 @@ export default function App() {
         body { background: #0F172A; }
         input, select, button { font-family: 'Montserrat', sans-serif; }
         
+        /* Botonera e Inputs Modernos */
         .ap-btn { display:inline-flex; align-items:center; justify-content:center; gap:8px; border:none; border-radius:10px; padding:12px 16px; font-weight:700; font-size:13px; cursor:pointer; transition: all 0.2s ease; min-height: 44px; }
         .ap-btn:hover { opacity:.9; transform: translateY(-1px); }
         .ap-btn:active { transform: translateY(0); }
@@ -517,9 +520,13 @@ export default function App() {
         .ap-input { background:#1E293B; border:1px solid #334155; border-radius:10px; padding:10px 14px; font-size:13px; color:#F8FAFC; width:100%; min-height: 44px; transition: border-color 0.2s; }
         .ap-input:focus { border-color: #FF6B35; outline: none; }
         
+        /* Contenedores Premium (Estilo Tarjeta) */
         .ap-card { background:#1E293B; border-radius:16px; padding:20px; border:1px solid #334155; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.3); }
+        
+        /* Tarjetas de Alumno (Mobile) */
         .student-mobile-card { background: #111827; border-radius: 12px; padding: 16px; border: 1px solid #1F2937; margin-bottom: 12px; display: flex; flex-direction: column; gap: 12px; }
         
+        /* Tablas adaptables */
         .ap-table-wrapper { overflow-x: auto; border-radius: 12px; border: 1px solid #334155; background: #1E2937; }
         .ap-table { width:100%; border-collapse:collapse; font-size:13px; text-align: left; }
         .ap-table th { padding:14px 16px; background:#111827; color:#94A3B8; font-weight:700; font-size:11px; text-transform:uppercase; letter-spacing:.05em; }
@@ -529,9 +536,11 @@ export default function App() {
         .ap-spin { animation: ap-spin-kf 1s linear infinite; }
         @keyframes ap-spin-kf { to { transform: rotate(360deg); } }
 
+        /* Responsive Grid General */
         .config-grid { display: grid; grid-template-columns: 320px 1fr; gap: 24px; }
         .attendance-deck { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 16px; }
 
+        /* Navegación Adaptable Móvil/Escritorio */
         .nav-desktop { display: flex; gap: 10px; padding: 16px 24px; background: #111827; border-bottom: 1px solid #334155; }
         .nav-mobile { display: none; }
 
@@ -547,6 +556,7 @@ export default function App() {
         }
       `}</style>
 
+      {/* Header Corporativo Premium */}
       <div style={{ background: '#111827', padding: '20px 24px', borderBottom: '1px solid #232E42', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
           <div style={{ fontSize: 20, fontWeight: 800, letterSpacing: '.03em', color: '#FF6B35' }}>ACADEMIA PIRINEOS</div>
@@ -554,6 +564,7 @@ export default function App() {
         </div>
       </div>
 
+      {/* Navegación Escritorio (Se oculta en móvil automáticamente) */}
       <div className="nav-desktop">
         {[
           { key: 'asistencia', label: 'Asistencia Diaria', icon: ClipboardList },
@@ -568,6 +579,7 @@ export default function App() {
         ))}
       </div>
 
+      {/* Menú de Navegación Inferior Fijo para Móvil (Estilo App Nativa) */}
       <div className="nav-mobile">
         {[
           { key: 'asistencia', label: 'Asistencia', icon: ClipboardList },
@@ -583,6 +595,7 @@ export default function App() {
         ))}
       </div>
 
+      {/* Alertas Globales de Sistema */}
       {(error || info) && (
         <div style={{ margin: '16px 24px 0', padding: '12px 16px', borderRadius: 12, fontSize: 13, fontWeight: 700,
           background: error ? 'rgba(239,68,68,0.15)' : 'rgba(16,185,129,0.15)', color: error ? '#EF4444' : '#10B981', display: 'flex', alignItems: 'center', gap: 10, border: `1px solid ${error ? 'rgba(239,68,68,0.2)' : 'rgba(16,185,129,0.2)'}` }}>
@@ -590,6 +603,7 @@ export default function App() {
         </div>
       )}
 
+      {/* Contenedor Principal Dinámico */}
       <div style={{ padding: '20px 24px' }}>
         {loading ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: '#94A3B8', fontSize: 14, justifyContent: 'center', padding: 40 }}>
@@ -634,6 +648,8 @@ export default function App() {
   );
 }
 
+/* ---------- Sub-vistas Rediseñadas ---------- */
+
 function ConfigView(props) {
   const {
     teachers, students, teacherById, newTeacherName, setNewTeacherName, addTeacher, deleteTeacher,
@@ -643,6 +659,7 @@ function ConfigView(props) {
 
   return (
     <div className="config-grid">
+      {/* Panel de Profesores */}
       <div className="ap-card" style={{ height: 'fit-content' }}>
         <div style={{ fontWeight: 700, marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8, fontSize: 15, color: '#FF6B35' }}>
           <Users size={18} /> Configuración Profes
@@ -665,11 +682,13 @@ function ConfigView(props) {
         </div>
       </div>
 
+      {/* Ficha Modular de Alumnos */}
       <div className="ap-card">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18, flexWrap: 'wrap', gap: 12 }}>
           <div style={{ fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8, fontSize: 15, color: '#FF6B35' }}>
             <Pencil size={18} /> {editingStudentId ? 'Modificar Ficha Alumno' : 'Ficha de Alta Alumno'}
           </div>
+          
           <label className="ap-btn ap-btn-navy" style={{ cursor: 'pointer' }}>
             <FileSpreadsheet size={16} color="#10B981" /> Importar desde Excel
             <input type="file" accept=".xlsx, .xls, .csv" onChange={handleExcelImport} style={{ display: 'none' }} />
@@ -720,6 +739,7 @@ function ConfigView(props) {
           {editingStudentId && <button className="ap-btn ap-btn-ghost" onClick={cancelEditStudent}>Cancelar</button>}
         </div>
 
+        {/* Listado de Alumnos Matriculados */}
         <div style={{ marginTop: 24, borderTop: '1px solid #334155', paddingTop: 18 }}>
           <div style={{ fontSize: 14, fontWeight: 700, color: '#94A3B8', marginBottom: 12 }}>Alumnos Registrados ({students.length})</div>
           {students.length === 0 && <div style={{ fontSize: 13, color: '#64748B', textAlign: 'center', padding: 20 }}>No hay alumnos matriculados en el sistema.</div>}
@@ -828,6 +848,7 @@ function AttendanceView(props) {
 
   return (
     <div className="ap-card">
+      {/* Controles superiores responsivos */}
       <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 20, flexWrap: 'wrap' }}>
         <input type="date" className="ap-input" style={{ width: '100%', maxWidth: 170 }} value={attDate} onChange={e => setAttDate(e.target.value)} />
         <select className="ap-input" style={{ width: '100%', maxWidth: 200 }} value={attTeacherFilter} onChange={e => setAttTeacherFilter(e.target.value)}>
@@ -860,6 +881,7 @@ function AttendanceView(props) {
         </div>
       )}
 
+      {/* Vista de Tarjetas Adaptativas (Modo Híbrido Premium Tarjeta) */}
       {attWeekdayIdx < 0 ? (
         <div style={{ color: '#64748B', fontSize: 13, textAlign: 'center', padding: 20 }}>No se imparten clases lectivas en fin de semana.</div>
       ) : studentsForDay.length === 0 ? (
@@ -907,6 +929,7 @@ function AttendanceView(props) {
                       <UserX size={13} /> <span style={{ fontSize: 11 }}>Ausente</span>
                     </button>
                   </div>
+                  
                   <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#94A3B8', fontWeight: 600, cursor: 'pointer' }}>
                     <input type="checkbox" style={{ width: 16, height: 16, accentColor: '#FF6B35' }} checked={!!rec.justified} onChange={e => updateField(s.id, 'justified', e.target.checked)} />
                     Justificar
@@ -949,7 +972,7 @@ function MonthlyView(props) {
               <tr>
                 <th style={{ position: 'sticky', left: 0, background: '#111827', zIndex: 10 }}>Alumno</th>
                 {monthlyDates.map(d => <th key={d.iso} style={{ textAlign: 'center', minWidth: 90 }}>{d.label} {d.dayNum}</th>)}
-                <th style={{ textAlign: 'center' }}>OK</th><th>Tardes</th><th>Faltas</th>
+                <th style={{ textAnlign: 'center' }}>OK</th><th>Tardes</th><th>Faltas</th>
               </tr>
             </thead>
             <tbody>
@@ -989,6 +1012,7 @@ function ResumenView(props) {
 
   return (
     <div style={{ display: 'grid', gap: 20 }}>
+      {/* Módulo cabecera KPI */}
       <div className="ap-card" style={{ display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', flex: 1 }}>
           <input type="month" className="ap-input" style={{ width: '100%', maxWidth: 160 }} value={resumenMonth} onChange={e => setResumenMonth(e.target.value)} />
@@ -1004,6 +1028,7 @@ function ResumenView(props) {
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 20 }}>
+        {/* Historial barras por fecha */}
         <div className="ap-card">
           <div style={{ fontWeight: 700, marginBottom: 14, fontSize: 14, color: '#FF6B35' }}>Ausencias por Jornada</div>
           {absencesByDate.length === 0 ? (
@@ -1023,6 +1048,7 @@ function ResumenView(props) {
           )}
         </div>
 
+        {/* Distribución por días y tramos */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
           <div className="ap-card">
             <div style={{ fontWeight: 700, marginBottom: 12, fontSize: 14, color: '#94A3B8' }}>Faltas según Día Semanal</div>
@@ -1056,6 +1082,7 @@ function ResumenView(props) {
         </div>
       </div>
 
+      {/* Tabla acumulada horas tutoría */}
       <div className="ap-card">
         <div style={{ fontWeight: 700, fontSize: 14, color: '#F8FAFC' }}>Horas Docentes Efectivas Asistidas</div>
         <div style={{ fontSize: 12, color: '#64748B', marginBottom: 16, marginTop: 2 }}>Cómputo acumulado en base a registros de check-in y check-out firmados</div>
