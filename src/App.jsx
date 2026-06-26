@@ -81,7 +81,7 @@ export default function App() {
     { valor: 10, nombre: "Octubre" }, { valor: 11, nombre: "Noviembre" }, { valor: 12, nombre: "Diciembre" }
   ];
 
-  // --- SINCRO INICIAL SEGURA ---
+  // --- SINCRONIZACIÓN SEgURA CON FIREBASE ---
   useEffect(() => {
     async function sincronizarConFirebase() {
       if (window.storage) {
@@ -103,7 +103,7 @@ export default function App() {
             localStorage.setItem('asistencias', JSON.stringify(datosAsistencias));
           }
         } catch (error) {
-          console.error("Firebase offline. Protegiendo LocalStorage.", error);
+          console.error("Firebase offline o reconectando...", error);
         }
       }
     }
@@ -233,14 +233,12 @@ export default function App() {
   const totalDiasMes = new Date(anioCuadrante, mesCuadrante, 0).getDate();
   const arregloDias = Array.from({ length: totalDiasMes }, (_, i) => i + 1);
 
-  // Alumnos filtrados en la vista diaria superior
   const alumnosFiltrados = alumnos.filter(a => 
     a.profesor === profesorActivo && 
     a.horario === horaSeleccionada &&
     (a.dias === diaFiltroTabla || a.dias === 'L-M-X-J-V')
   );
 
-  // Alumnos para la vista mensual inferior
   const alumnosDelProfesor = alumnos.filter(a => a.profesor === profesorActivo);
   
   const tarjetaEstilo = { backgroundColor: '#1e293b', padding: '20px', borderRadius: '12px', border: '1px solid #334155' };
@@ -350,9 +348,21 @@ export default function App() {
                         return (
                           <tr key={a.id} style={{ borderBottom: '1px solid #334155' }}>
                             <td style={{ padding: '12px', fontWeight: 'bold' }}>{a.nombre}</td>
-                            <td style={{ padding: '12px', textAlign: 'center' }}>{a.grupo}</td>
-                            <td style={{ padding: '12px', textAlign: 'center' }}>{a.horario}</td>
-                            <td style={{ padding: '12px', textAlign: 'center' }}>{a.dias}</td>
+                            <td style={{ padding: '12px', textAlign: 'center' }}>
+                              <select value={a.grupo} onChange={(e) => cambiarNivelAlumno(a.id, e.target.value)} style={{ backgroundColor: '#0f172a', color: '#ff6b35', padding: '4px 8px', borderRadius: '6px', border: '1px solid #ff6b35', fontSize: '12px', fontWeight: 'bold', outline: 'none', cursor: 'pointer' }}>
+                                {nivelesAcademia.map(n => <option key={n} value={n}>{n}</option>)}
+                              </select>
+                            </td>
+                            <td style={{ padding: '12px', textAlign: 'center' }}>
+                              <select value={a.horario} onChange={(e) => cambiarHorarioAlumno(a.id, e.target.value)} style={{ backgroundColor: '#0f172a', color: '#38bdf8', padding: '4px 8px', borderRadius: '6px', border: '1px solid #38bdf8', fontSize: '12px', fontWeight: 'bold', outline: 'none', cursor: 'pointer' }}>
+                                {horariosAcademia.map(h => <option key={h} value={h}>{h}</option>)}
+                              </select>
+                            </td>
+                            <td style={{ padding: '12px', textAlign: 'center' }}>
+                              <select value={a.dias || 'L-X'} onChange={(e) => cambiarDiasAlumno(a.id, e.target.value)} style={{ backgroundColor: '#0f172a', color: '#10b981', padding: '4px 8px', borderRadius: '6px', border: '1px solid #10b981', fontSize: '12px', fontWeight: 'bold', outline: 'none', cursor: 'pointer' }}>
+                                {opcionesDias.map(o => <option key={o.clave} value={o.clave}>{o.clave}</option>)}
+                              </select>
+                            </td>
                             <td style={{ padding: '12px' }}>
                               <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
                                 <button onClick={() => marcarAsistencia(a.id, 'PRESENTE')} style={{ backgroundColor: historial?.estado === 'PRESENTE' ? '#16a34a' : '#0f172a', color: historial?.estado === 'PRESENTE' ? 'white' : '#4ade80', border: '1px solid #16a34a', padding: '6px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }}>✓ PRESENTE</button>
@@ -375,7 +385,7 @@ export default function App() {
                 </div>
               </div>
 
-              {/* CUADRANTE MENSUAL SEGURO CONTRA HORARIOS DIFERENTES */}
+              {/* CUADRANTE MENSUAL CORREGIDO */}
               <div style={tarjetaEstilo}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #334155', paddingBottom: '15px', marginBottom: '15px', flexWrap: 'wrap', gap: '10px' }}>
                   <div>
@@ -410,26 +420,23 @@ export default function App() {
                         <tr key={alumno.id} style={{ borderBottom: '1px solid #334155' }}>
                           <td style={{ padding: '8px 10px', fontWeight: 'bold', border: '1px solid #334155' }}>{alumno.nombre}</td>
                           <td style={{ padding: '8px 4px', color: '#ff6b35', fontSize: '10px', textAlign: 'center', border: '1px solid #334155' }}>
-                            {alumno.dias} <br/> <span style={{ color: '#38bdf8' }}>{alumno.horario.split('-')[0]}</span>
+                            {alumno.dias} <br/> <span style={{ color: '#38bdf8' }}>{alumno.horario ? alumno.horario.split('-')[0] : ''}</span>
                           </td>
                           {arregloDias.map(dia => {
                             const mmStr = mesCuadrante < 10 ? `0${mesCuadrante}` : mesCuadrante;
                             const ddStr = dia < 10 ? `0${dia}` : dia;
                             const fechaCelda = `${anioCuadrante}-${mmStr}-${ddStr}`;
                             
-                            // MEJORA TOTAL: Escaneamos todos los tramos horarios posibles para este alumno en este día concreto.
-                            // Si se encuentra un registro en cualquiera de ellos, lo pintará.
                             let registroEncontrado = null;
                             for (const horaPosible of horariosAcademia) {
                               const claveBuscada = `${fechaCelda}_${horaPosible}_${alumno.id}`;
                               if (asistencias[claveBuscada]) {
                                 registroEncontrado = asistencias[claveBuscada];
-                                break; // Paramos el bucle al encontrarlo
+                                break;
                               }
                             }
                             
-                            // Fallback de seguridad por si acaso se guardó con el horario que el alumno tiene asignado actualmente
-                            if (!registroEncontrado) {
+                            if (!registroEncontrado && alumno.horario) {
                               const claveEspecial = `${fechaCelda}_${alumno.horario}_${alumno.id}`;
                               if (asistencias[claveEspecial]) {
                                 registroEncontrado = asistencias[claveEspecial];
@@ -441,29 +448,17 @@ export default function App() {
                             if (registroEncontrado?.estado === 'AUSENTE') renderEstado = "🔴";
 
                             return (
-                              <td 
-                                key={dia} 
-                                style={{ textAlign: 'center', padding: '4px 0', border: '1px solid #334155', fontSize: '11px' }}
-                                title={`${alumno.nombre} - ${fechaCelda}`}
-                              >
+                              <td key={dia} style={{ textAlign: 'center', padding: '4px 0', border: '1px solid #334155', fontSize: '11px' }}>
                                 {renderEstado}
                               </td>
                             );
                           })}
                         </tr>
                       ))}
-                      {alumnosDelProfesor.length === 0 && (
-                        <tr>
-                          <td colSpan={totalDiasMes + 2} style={{ padding: '20px', color: '#94a3b8', fontStyle: 'italic', textAlign: 'center' }}>
-                            No hay alumnos registrados para este profesor.
-                          </td>
-                        </tr>
-                      )}
                     </tbody>
                   </table>
                 </div>
                 
-                {/* LEYENDA */}
                 <div style={{ display: 'flex', gap: '15px', marginTop: '15px', fontSize: '12px', color: '#94a3b8' }}>
                   <span>🟢 = Presente</span>
                   <span>🔴 = Ausente</span>
