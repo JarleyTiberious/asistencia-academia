@@ -36,6 +36,7 @@ export default function App() {
   const [nuevoProfeNombre, setNuevoProfeNombre] = useState('');
   const [nuevoAlumnoNombre, setNuevoAlumnoNombre] = useState('');
   const [nuevoAlumnoGrupo, setNuevoAlumnoGrupo] = useState('B2');
+  const [nuevoAlumnoDias, setNuevoAlumnoDias] = useState('L-X'); // Estado por defecto para nuevos alumnos
   const [escuchandoVoces, setEscuchandoVoces] = useState(false);
   const [mensajeVozInfo, setMensajeVozInfo] = useState('');
 
@@ -49,6 +50,14 @@ export default function App() {
     "17:15-18:15",
     "19:15-20:15",
     "20:15-21:15"
+  ];
+
+  // Opciones de días laborables en la academia
+  const opcionesDias = [
+    { clave: "L-X", texto: "Lunes y Miércoles" },
+    { clave: "M-J", texto: "Martes y Jueves" },
+    { clave: "V", texto: "Viernes" },
+    { clave: "L-M-X-J-V", texto: "Lunes a Viernes" }
   ];
 
   const mapeoHorasVoz = [
@@ -90,26 +99,32 @@ export default function App() {
     }
   };
 
-  // --- CAMBIAR NIVEL DE UN ALUMNO ---
+  // --- OBTENER EL DÍA DE LA SEMANA SEGÚN LA FECHA ---
+  const obtenerDiaSemanaClave = (fechaStr) => {
+    const fecha = new Date(fechaStr);
+    const numeroDia = fecha.getDay(); // 0 = Domingo, 1 = Lunes, 2 = Martes, 3 = Miércoles, 4 = Jueves, 5 = Viernes, 6 = Sábado
+    
+    if (numeroDia === 1 || numeroDia === 3) return "L-X"; // Lunes o Miércoles
+    if (numeroDia === 2 || numeroDia === 4) return "M-J"; // Martes o Jueves
+    if (numeroDia === 5) return "V"; // Viernes
+    return "L-X"; // Fallback por defecto
+  };
+
+  // --- ACCIONES DE EDICIÓN INLINE ---
   const cambiarNivelAlumno = (id, nuevoNivel) => {
-    const listaActualizada = alumnos.map(alumno => {
-      if (alumno.id === id) {
-        return { ...alumno, grupo: nuevoNivel };
-      }
-      return alumno;
-    });
+    const listaActualizada = alumnos.map(al => al.id === id ? { ...al, grupo: nuevoNivel } : al);
     setAlumnos(listaActualizada);
     guardarDatos('alumnos', listaActualizada);
   };
 
-  // --- NUEVA FUNCIÓN: CAMBIAR HORARIO ASIGNADO A UN ALUMNO ---
   const cambiarHorarioAlumno = (id, nuevoHorario) => {
-    const listaActualizada = alumnos.map(alumno => {
-      if (alumno.id === id) {
-        return { ...alumno, horario: nuevoHorario };
-      }
-      return alumno;
-    });
+    const listaActualizada = alumnos.map(al => al.id === id ? { ...al, horario: nuevoHorario } : al);
+    setAlumnos(listaActualizada);
+    guardarDatos('alumnos', listaActualizada);
+  };
+
+  const cambiarDiasAlumno = (id, nuevosDias) => {
+    const listaActualizada = alumnos.map(al => al.id === id ? { ...al, dias: nuevosDias } : al);
     setAlumnos(listaActualizada);
     guardarDatos('alumnos', listaActualizada);
   };
@@ -137,10 +152,14 @@ export default function App() {
       }
     }
 
-    // El filtro de voz ahora busca alumnos que coincidan en el profesor y su hora asignada
-    const listaAlumnosFiltrados = alumnos.filter(a => a.profesor === profeEncontrado && a.horario === horaEncontrada);
-    let alumnoEncontrado = null;
+    const diaActualFiltro = obtenerDiaSemanaClave(fechaSeleccionada);
+    const listaAlumnosFiltrados = alumnos.filter(a => 
+      a.profesor === profeEncontrado && 
+      a.horario === horaEncontrada &&
+      (a.dias === diaActualFiltro || a.dias === 'L-M-X-J-V')
+    );
 
+    let alumnoEncontrado = null;
     for (const alumno of listaAlumnosFiltrados) {
       if (texto.includes(alumno.nombre.toLowerCase())) {
         alumnoEncontrado = alumno;
@@ -193,7 +212,7 @@ export default function App() {
     recognition.start();
   };
 
-  // --- RESTO DE ACCIONES ---
+  // --- RESTO DE ACCIONES GESTIÓN ---
   const agregarProfesor = () => {
     if (!nuevoProfeNombre.trim()) return;
     const nuevos = [...profesores, nuevoProfeNombre.trim()];
@@ -217,7 +236,8 @@ export default function App() {
       nombre: nuevoAlumnoNombre.trim(),
       grupo: nuevoAlumnoGrupo,
       profesor: profesorActivo,
-      horario: horaSeleccionada // <-- Se le asigna automáticamente la hora que tienes filtrada en pantalla
+      horario: horaSeleccionada,
+      dias: nuevoAlumnoDias // Guarda la combinación de días seleccionada
     };
     const nuevos = [...alumnos, nuevo];
     setAlumnos(nuevos);
@@ -258,12 +278,15 @@ export default function App() {
         const nombreDetectado = item.Nombre || item.nombre || item.Alumno || item.alumno || item["Nombre Alumno"] || item["Apellidos y Nombre"];
         const grupoDetectado = item.Grupo || item.grupo || item.Nivel || item.nivel || "B2";
         const horarioDetectado = item.Horario || item.horario || item.Hora || item.hora || horaSeleccionada;
+        const diasDetectados = item.Dias || item.dias || item.Días || item.días || obtenerDiaSemanaClave(fechaSeleccionada);
+        
         return {
           id: `excel_${Date.now()}_${index}`,
           nombre: nombreDetectado ? nombreDetectado.toString().trim() : "Alumno Anónimo",
           grupo: grupoDetectado.toString().trim(),
           profesor: profesorActivo,
-          horario: horarioDetectado.toString().trim() // Si el Excel trae columna de Horario, lo respeta. Si no, le mete la actual.
+          horario: horarioDetectado.toString().trim(),
+          dias: diasDetectados.toString().trim()
         };
       });
       const listaActualizada = [...alumnos, ...nuevosAlumnos];
@@ -273,8 +296,13 @@ export default function App() {
     reader.readAsBinaryString(file);
   };
 
-  // --- FILTRADO DOBLE CLAVE: PROFESOR + HORARIO SELECCIONADO ---
-  const alumnosFiltrados = alumnos.filter(a => a.profesor === profesorActivo && a.horario === horaSeleccionada);
+  // --- FILTRADO TRIPLE AVANZADO: PROFESOR + HORARIO + DÍA DE LA SEMANA ---
+  const diaFiltroActivo = obtenerDiaSemanaClave(fechaSeleccionada);
+  const alumnosFiltrados = alumnos.filter(a => 
+    a.profesor === profesorActivo && 
+    a.horario === horaSeleccionada &&
+    (a.dias === diaFiltroActivo || a.dias === 'L-M-X-J-V')
+  );
   
   const tarjetaEstilo = { backgroundColor: '#1e293b', padding: '20px', borderRadius: '12px', border: '1px solid #334155' };
   const inputEstilo = { backgroundColor: '#0f172a', color: '#f8fafc', border: '1px solid #334155', padding: '10px', borderRadius: '8px', outline: 'none' };
@@ -287,7 +315,7 @@ export default function App() {
       <div style={{ ...tarjetaEstilo, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '15px', marginBottom: '20px' }}>
         <div style={{ flex: 1 }}>
           <h1 style={{ fontSize: '26px', fontWeight: 'bold', margin: '0 0 5px 0' }}>ACADEMIA PIRINEOS</h1>
-          <p style={{ color: '#94a3b8', margin: 0, fontSize: '14px' }}>Control de Asistencia Profesional por Voz</p>
+          <p style={{ color: '#94a3b8', margin: 0, fontSize: '14px' }}>Control de Asistencia Profesional Avanzado</p>
         </div>
         <div>
           <button onClick={() => setVistaAdmin(!vistaAdmin)} style={{ ...botonNaranja, backgroundColor: vistaAdmin ? '#475569' : '#ff6b35' }}>
@@ -335,7 +363,7 @@ export default function App() {
             </div>
           ) : (
             <div style={tarjetaEstilo}>
-              {/* FILTROS */}
+              {/* FILTROS Y ALTA */}
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '15px', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#0f172a', padding: '15px', borderRadius: '10px', marginBottom: '20px', border: '1px solid #334155' }}>
                 <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
                   <input type="date" value={fechaSeleccionada} onChange={(e) => setFechaSeleccionada(e.target.value)} style={{ ...inputEstilo, fontWeight: 'bold' }} />
@@ -348,9 +376,16 @@ export default function App() {
                     {escuchandoVoces ? '🛑...' : '🎙️'}
                   </button>
                   <input type="text" placeholder={escuchandoVoces ? "Hable ahora..." : "Nuevo alumno..."} value={nuevoAlumnoNombre} onChange={(e) => setNuevoAlumnoNombre(e.target.value)} style={inputEstilo} />
+                  
                   <select value={nuevoAlumnoGrupo} onChange={(e) => setNuevoAlumnoGrupo(e.target.value)} style={{ ...inputEstilo, fontWeight: 'bold' }}>
                     {nivelesAcademia.map(nivel => <option key={nivel} value={nivel}>{nivel}</option>)}
                   </select>
+
+                  {/* NUEVO SELECTOR DE DÍAS AL CREAR */}
+                  <select value={nuevoAlumnoDias} onChange={(e) => setNuevoAlumnoDias(e.target.value)} style={{ ...inputEstilo, fontWeight: 'bold', borderColor: '#10b981' }}>
+                    {opcionesDias.map(opt => <option key={opt.clave} value={opt.clave}>📅 {opt.texto}</option>)}
+                  </select>
+
                   <button onClick={agregarAlumno} style={botonNaranja}>+</button>
                 </div>
               </div>
@@ -362,7 +397,8 @@ export default function App() {
                     <tr style={{ borderBottom: '2px solid #334155', color: '#94a3b8', fontSize: '13px' }}>
                       <th style={{ padding: '12px' }}>Alumno</th>
                       <th style={{ padding: '12px', textAlign: 'center' }}>Nivel</th>
-                      <th style={{ padding: '12px', textAlign: 'center' }}>Horario (Editable)</th>
+                      <th style={{ padding: '12px', textAlign: 'center' }}>Horario</th>
+                      <th style={{ padding: '12px', textAlign: 'center' }}>Días (Editable)</th>
                       <th style={{ padding: '12px', textAlign: 'center' }}>Acciones</th>
                       <th style={{ padding: '12px', textAlign: 'center' }}>Estado</th>
                       <th style={{ padding: '12px', textAlign: 'center' }}></th>
@@ -385,7 +421,6 @@ export default function App() {
                             </select>
                           </td>
 
-                          {/* NUEVA COLUMNA: HORARIO EDITABLE POR ALUMNO */}
                           <td style={{ padding: '12px', textAlign: 'center' }}>
                             <select
                               value={a.horario}
@@ -393,6 +428,17 @@ export default function App() {
                               style={{ backgroundColor: '#0f172a', color: '#38bdf8', padding: '4px 8px', borderRadius: '6px', fontSize: '12px', fontWeight: 'bold', border: '1px solid #38bdf8', outline: 'none', cursor: 'pointer' }}
                             >
                               {horariosAcademia.map(h => <option key={h} value={h}>🕒 {h}</option>)}
+                            </select>
+                          </td>
+
+                          {/* NUEVA COLUMNA: SELECCIÓN DE DÍAS EDITABLE */}
+                          <td style={{ padding: '12px', textAlign: 'center' }}>
+                            <select
+                              value={a.dias || 'L-X'}
+                              onChange={(e) => cambiarDiasAlumno(a.id, e.target.value)}
+                              style={{ backgroundColor: '#0f172a', color: '#10b981', padding: '4px 8px', borderRadius: '6px', fontSize: '12px', fontWeight: 'bold', border: '1px solid #10b981', outline: 'none', cursor: 'pointer' }}
+                            >
+                              {opcionesDias.map(opt => <option key={opt.clave} value={opt.clave}>{opt.clave}</option>)}
                             </select>
                           </td>
 
@@ -418,8 +464,8 @@ export default function App() {
                     })}
                     {alumnosFiltrados.length === 0 && (
                       <tr>
-                        <td colSpan="6" style={{ padding: '30px', color: '#94a3b8', textAlign: 'center', fontStyle: 'italic' }}>
-                          No hay alumnos asignados a este profesor en el horario de {horaSeleccionada}.
+                        <td colSpan="7" style={{ padding: '30px', color: '#94a3b8', textAlign: 'center', fontStyle: 'italic' }}>
+                          No hay alumnos asignados para este profesor, horario y días lectivos correspondientes.
                         </td>
                       </tr>
                     )}
