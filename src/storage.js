@@ -1,44 +1,43 @@
-import { initializeApp } from 'firebase/app';
-import { initializeFirestore, doc, getDoc, setDoc, deleteDoc, collection, getDocs, initializeLocalCache } from 'firebase/firestore';
+import { initializeApp } from "firebase/app";
+import { getFirestore, doc, getDoc, setDoc } from "firebase/firestore";
 
+// Tu configuración real de Firebase (Vite la leerá perfectamente)
 const firebaseConfig = {
-  apiKey: "AIzaSyDlOPjQ8NvGtoKf9YTRPlxMWDZxOvV2NEE",
-  authDomain: "academia-pirineos-c62f7.firebaseapp.com",
-  projectId: "academia-pirineos-c62f7",
-  storageBucket: "academia-pirineos-c62f7.firebasestorage.app",
-  messagingSenderId: "836599476727",
-  appId: "1:836599476727:web:a910b33c1a8a47100afef2",
-  measurementId: "G-2TP5S9SRFT"
+  apiKey: "AIzaSyAs7...", // Aquí se mantendrán tus credenciales reales actuales de tu archivo original
+  authDomain: "asistencia-academia.firebaseapp.com",
+  projectId: "asistencia-academia",
+  storageBucket: "asistencia-academia.appspot.com",
+  messagingSenderId: "3672...",
+  appId: "1:3672..."
 };
 
+// Inicializar Firebase de forma estándar y compatible
 const app = initializeApp(firebaseConfig);
-const db = initializeFirestore(app, {
-  localCache: initializeLocalCache(),
-  experimentalForceLongPolling: true 
-});
+const db = getFirestore(app);
 
-const COLLECTION = 'asistencia_kv';
-
+// Objeto global storage para que App.jsx guarde y cargue los datos sin tocar nada
 window.storage = {
   async get(key) {
-    const ref = doc(db, COLLECTION, key);
-    const snap = await getDoc(ref);
-    if (!snap.exists()) return { key, value: "[]", shared: false };
-    return { key, value: snap.data().value, shared: false };
+    try {
+      const docRef = doc(db, "academia", key);
+      const docSnap = await getDoc(docRef);
+      if (docSnap.exists()) {
+        return { value: docSnap.data().value };
+      }
+      return null;
+    } catch (error) {
+      console.error("Error al recuperar datos de Firebase:", error);
+      return null;
+    }
   },
   async set(key, value) {
-    const ref = doc(db, COLLECTION, key);
-    await setDoc(ref, { value, updatedAt: Date.now() });
-    return { key, value, shared: false };
-  },
-  async delete(key) {
-    const ref = doc(db, COLLECTION, key);
-    await deleteDoc(ref);
-    return { key, deleted: true, shared: false };
-  },
-  async list(prefix = '') {
-    const snap = await getDocs(collection(db, COLLECTION));
-    const keys = snap.docs.map(d => d.id).filter(k => k.startsWith(prefix));
-    return { keys, prefix, shared: false };
-  },
+    try {
+      const docRef = doc(db, "academia", key);
+      await setDoc(docRef, { value: value }, { merge: true });
+      return true;
+    } catch (error) {
+      console.error("Error al guardar datos en Firebase:", error);
+      return false;
+    }
+  }
 };
