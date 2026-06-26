@@ -81,7 +81,7 @@ export default function App() {
     { valor: 10, nombre: "Octubre" }, { valor: 11, nombre: "Noviembre" }, { valor: 12, nombre: "Diciembre" }
   ];
 
-  // --- ESCUDO DE PROTECCIÓN DE DATOS LOCALES ---
+  // --- SINCRO INICIAL SEGURA ---
   useEffect(() => {
     async function sincronizarConFirebase() {
       if (window.storage) {
@@ -240,7 +240,7 @@ export default function App() {
     (a.dias === diaFiltroTabla || a.dias === 'L-M-X-J-V')
   );
 
-  // Alumnos para la vista mensual inferior (¡Todos los del profesor activo!)
+  // Alumnos para la vista mensual inferior
   const alumnosDelProfesor = alumnos.filter(a => a.profesor === profesorActivo);
   
   const tarjetaEstilo = { backgroundColor: '#1e293b', padding: '20px', borderRadius: '12px', border: '1px solid #334155' };
@@ -375,7 +375,7 @@ export default function App() {
                 </div>
               </div>
 
-              {/* CUADRANTE MENSUAL INDEPENDIENTE Y SEGURO */}
+              {/* CUADRANTE MENSUAL SEGURO CONTRA HORARIOS DIFERENTES */}
               <div style={tarjetaEstilo}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #334155', paddingBottom: '15px', marginBottom: '15px', flexWrap: 'wrap', gap: '10px' }}>
                   <div>
@@ -417,20 +417,34 @@ export default function App() {
                             const ddStr = dia < 10 ? `0${dia}` : dia;
                             const fechaCelda = `${anioCuadrante}-${mmStr}-${ddStr}`;
                             
-                            // MEJORA CLAVE: Escanea el historial buscando cualquier asistencia en esta fecha,
-                            // sin importar si coincide o no con la hora que está marcada en el desplegable superior.
-                            const claveHistorialBuscada = `${fechaCelda}_${alumno.horario}_${alumno.id}`;
-                            const registro = asistencias[claveHistorialBuscada];
+                            // MEJORA TOTAL: Escaneamos todos los tramos horarios posibles para este alumno en este día concreto.
+                            // Si se encuentra un registro en cualquiera de ellos, lo pintará.
+                            let registroEncontrado = null;
+                            for (const horaPosible of horariosAcademia) {
+                              const claveBuscada = `${fechaCelda}_${horaPosible}_${alumno.id}`;
+                              if (asistencias[claveBuscada]) {
+                                registroEncontrado = asistencias[claveBuscada];
+                                break; // Paramos el bucle al encontrarlo
+                              }
+                            }
                             
+                            // Fallback de seguridad por si acaso se guardó con el horario que el alumno tiene asignado actualmente
+                            if (!registroEncontrado) {
+                              const claveEspecial = `${fechaCelda}_${alumno.horario}_${alumno.id}`;
+                              if (asistencias[claveEspecial]) {
+                                registroEncontrado = asistencias[claveEspecial];
+                              }
+                            }
+
                             let renderEstado = "-";
-                            if (registro?.estado === 'PRESENTE') renderEstado = "🟢";
-                            if (registro?.estado === 'AUSENTE') renderEstado = "🔴";
+                            if (registroEncontrado?.estado === 'PRESENTE') renderEstado = "🟢";
+                            if (registroEncontrado?.estado === 'AUSENTE') renderEstado = "🔴";
 
                             return (
                               <td 
                                 key={dia} 
                                 style={{ textAlign: 'center', padding: '4px 0', border: '1px solid #334155', fontSize: '11px' }}
-                                title={`${alumno.nombre} - ${fechaCelda} (${alumno.horario})`}
+                                title={`${alumno.nombre} - ${fechaCelda}`}
                               >
                                 {renderEstado}
                               </td>
@@ -453,7 +467,7 @@ export default function App() {
                 <div style={{ display: 'flex', gap: '15px', marginTop: '15px', fontSize: '12px', color: '#94a3b8' }}>
                   <span>🟢 = Presente</span>
                   <span>🔴 = Ausente</span>
-                  <span>- = Sin registro / No lectivo</span>
+                  <span>- = Sin registro</span>
                 </div>
               </div>
             </>
