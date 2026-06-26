@@ -11,15 +11,25 @@ export default function App() {
     new Date().toISOString().split('T')[0]
   );
   
+  // Nuevo estado para controlar los tramos horarios de la academia
+  const [horaSeleccionada, setHoraSeleccionada] = useState('16:15-17:15');
+  
   const [vistaAdmin, setVistaAdmin] = useState(false);
   const [nuevoProfeNombre, setNuevoProfeNombre] = useState('');
   const [nuevoAlumnoNombre, setNuevoAlumnoNombre] = useState('');
   const [nuevoAlumnoGrupo, setNuevoAlumnoGrupo] = useState('B2');
 
-  // --- LISTA DE NIVELES DE LA ACADEMIA ---
+  // --- CONFIGURACIÓN DE LA ACADEMIA ---
   const nivelesAcademia = [
     "Primaria", "ESO", "Bachillerato", "PAU", 
     "Mayores 25", "Acceso Grado", "B1", "B2", "C1", "APTIS"
+  ];
+
+  const horariosAcademia = [
+    "16:15-17:15",
+    "17:15-18:15",
+    "19:15-20:15",
+    "20:15-21:15"
   ];
 
   // --- CARGA DESDE FIREBASE ---
@@ -86,7 +96,8 @@ export default function App() {
   };
 
   const marcarAsistencia = (alumnoId, estado) => {
-    const claveHistorial = `${fechaSeleccionada}_${alumnoId}`;
+    // La clave ahora incluye la fecha Y el tramo horario específico
+    const claveHistorial = `${fechaSeleccionada}_${horaSeleccionada}_${alumnoId}`;
     const nuevas = {
       ...asistencias,
       [claveHistorial]: {
@@ -98,7 +109,7 @@ export default function App() {
     guardarEnFirebase('asistencias', nuevas);
   };
 
-  // --- IMPORTADOR DE EXCEL INTELIGENTE ---
+  // --- IMPORTADOR DE EXCEL ---
   const importarExcel = (e) => {
     const file = e.target.files[0];
     if (!file || !profesorActivo) return;
@@ -112,7 +123,6 @@ export default function App() {
       const listaJSON = XLSX.utils.sheet_to_json(sheet);
 
       const nuevosAlumnos = listaJSON.map((item, index) => {
-        // Busca variaciones comunes de títulos de columna
         const nombreDetectado = item.Nombre || item.nombre || item.Alumno || item.alumno || item["Nombre Alumno"] || item["Apellidos y Nombre"];
         const grupoDetectado = item.Grupo || item.grupo || item.Nivel || item.nivel || "B2";
 
@@ -159,7 +169,7 @@ export default function App() {
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '20px', alignItems: 'start' }}>
         
-        {/* SIDEBAR */}
+        {/* SIDEBAR: PROFESORES */}
         <div style={tarjetaEstilo}>
           <h2 style={{ fontSize: '14px', fontWeight: 'bold', color: '#94a3b8', textTransform: 'uppercase', marginBottom: '15px', letterSpacing: '1px' }}>
             Profesores Activos
@@ -201,6 +211,7 @@ export default function App() {
         <div style={{ gridColumn: 'span 2', display: 'flex', flexDirection: 'column', gap: '20px' }}>
           
           {vistaAdmin ? (
+            /* PANALES DE CONFIGURACIÓN */
             <div style={tarjetaEstilo}>
               <h3 style={{ fontSize: '18px', fontWeight: 'bold', marginBottom: '15px' }}>Añadir Nuevo Profesor</h3>
               <div style={{ display: 'flex', gap: '10px', marginBottom: '25px' }}>
@@ -218,7 +229,7 @@ export default function App() {
                 Importar Alumnos desde Excel
               </h3>
               <p style={{ color: '#94a3b8', fontSize: '14px', marginBottom: '15px' }}>
-                Sube tu archivo <strong>.xlsx</strong>. El sistema leerá automáticamente columnas de nombre (Nombre, Alumno...) y se vincularán a <strong>{profesorActivo || 'ningún profesor'}</strong>.
+                Sube tu archivo <strong>.xlsx</strong>. El sistema vinculará a los alumnos directamente a <strong>{profesorActivo || 'ningún profesor'}</strong>.
               </p>
               <input 
                 type="file" 
@@ -229,16 +240,30 @@ export default function App() {
               />
             </div>
           ) : (
+            /* CONTROL DE ASISTENCIA CON FILTRO DE HORA */
             <div style={tarjetaEstilo}>
               
-              {/* ALTAS Y FECHA */}
+              {/* SELECTORES DE FECHA, HORA Y ALTA DIRECTA */}
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '15px', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#0f172a', padding: '15px', borderRadius: '10px', marginBottom: '20px', border: '1px solid #334155' }}>
-                <input 
-                  type="date" 
-                  value={fechaSeleccionada} 
-                  onChange={(e) => setFechaSeleccionada(e.target.value)} 
-                  style={{ ...inputEstilo, fontWeight: 'bold' }}
-                />
+                <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                  <input 
+                    type="date" 
+                    value={fechaSeleccionada} 
+                    onChange={(e) => setFechaSeleccionada(e.target.value)} 
+                    style={{ ...inputEstilo, fontWeight: 'bold' }}
+                  />
+                  {/* Selector de horas requerido */}
+                  <select
+                    value={horaSeleccionada}
+                    onChange={(e) => setHoraSeleccionada(e.target.value)}
+                    style={{ ...inputEstilo, fontWeight: 'bold', borderColor: '#ff6b35' }}
+                  >
+                    {horariosAcademia.map(h => (
+                      <option key={h} value={h}>🕒 {h}</option>
+                    ))}
+                  </select>
+                </div>
+
                 <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                   <input 
                     type="text" 
@@ -260,21 +285,22 @@ export default function App() {
                 </div>
               </div>
 
-              {/* TABLA ASISTENCIA */}
+              {/* TABLA DE ASISTENCIA */}
               <div style={{ overflowX: 'auto' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
                   <thead>
                     <tr style={{ borderBottom: '2px solid #334155', color: '#94a3b8', fontSize: '13px' }}>
                       <th style={{ padding: '12px' }}>Alumno</th>
                       <th style={{ padding: '12px', textAlign: 'center' }}>Nivel</th>
-                      <th style={{ padding: '12px', textAlign: 'center' }}>Acciones</th>
+                      <th style={{ padding: '12px', textAlign: 'center' }}>Acciones ({horaSeleccionada})</th>
                       <th style={{ padding: '12px', textAlign: 'center' }}>Estado</th>
                       <th style={{ padding: '12px', textAlign: 'center' }}></th>
                     </tr>
                   </thead>
                   <tbody>
                     {alumnosFiltrados.map(a => {
-                      const historial = asistencias[`${fechaSeleccionada}_${a.id}`];
+                      // Se recupera la asistencia cruzando fecha e intervalo de hora
+                      const historial = asistencias[`${fechaSeleccionada}_${horaSeleccionada}_${a.id}`];
                       return (
                         <tr key={a.id} style={{ borderBottom: '1px solid #334155' }}>
                           <td style={{ padding: '12px', fontWeight: 'bold' }}>{a.nombre}</td>
