@@ -37,11 +37,11 @@ export default function App() {
   const [nuevoAlumnoNombre, setNuevoAlumnoNombre] = useState('');
   const [nuevoAlumnoGrupo, setNuevoAlumnoGrupo] = useState('B2');
   
-  // --- OBTENER EL DÍA DE LA SEMANA SEGÚN LA FECHA ---
+  // --- FUNCIÓN PARA DETECTAR EL DÍA DEL CALENDARIO ---
   const obtenerDiaSemanaClave = (fechaStr) => {
     const partes = fechaStr.split('-');
     const fecha = new Date(partes[0], partes[1] - 1, partes[2]);
-    const numeroDia = fecha.getDay(); 
+    const numeroDia = fecha.getDay(); // 1=L, 2=M, 3=X, 4=J, 5=V
     
     if (numeroDia === 1 || numeroDia === 3) return "L-X"; 
     if (numeroDia === 2 || numeroDia === 4) return "M-J"; 
@@ -49,8 +49,9 @@ export default function App() {
     return "L-X"; 
   };
 
-  // El estado inicial se acopla dinámicamente a la fecha actual seleccionada
+  // Estado para el formulario de alta y estado para el FILTRO VISUAL de la tabla
   const [nuevoAlumnoDias, setNuevoAlumnoDias] = useState(() => obtenerDiaSemanaClave(new Date().toISOString().split('T')[0])); 
+  const [diaFiltroTabla, setDiaFiltroTabla] = useState(() => obtenerDiaSemanaClave(new Date().toISOString().split('T')[0]));
 
   const nivelesAcademia = [
     "Primaria", "ESO", "Bachillerato", "PAU", 
@@ -71,7 +72,7 @@ export default function App() {
     { clave: "L-M-X-J-V", texto: "Lunes a Viernes" }
   ];
 
-  // --- SINCRONIZACIÓN INTELIGENTE CON ESCUDO DE SEGURIDAD ---
+  // --- ESCUDO DE PROTECCIÓN DE DATOS DE LOCALSTORAGE ---
   useEffect(() => {
     async function sincronizarConFirebase() {
       if (window.storage) {
@@ -80,8 +81,6 @@ export default function App() {
           const datosAlumnos = await window.storage.get('alumnos');
           const datosAsistencias = await window.storage.get('asistencias');
 
-          // LLAVE DE SEGURIDAD CRÍTICA: Solo sobreescribimos LocalStorage si Firebase trae datos reales.
-          // Esto evita que las respuestas vacías de la nube borren tus alumnos locales.
           if (datosProfes && Array.isArray(datosProfes) && datosProfes.length > 0) {
             setProfesores(datosProfes);
             localStorage.setItem('profesores', JSON.stringify(datosProfes));
@@ -95,16 +94,18 @@ export default function App() {
             localStorage.setItem('asistencias', JSON.stringify(datosAsistencias));
           }
         } catch (error) {
-          console.error("Error al conectar con Firebase. Protegiendo LocalStorage.", error);
+          console.error("Firebase offline. Datos locales protegidos.", error);
         }
       }
     }
     sincronizarConFirebase();
   }, []);
 
-  // Actualiza el estado del formulario de alta si cambias la fecha del calendario principal
+  // Al cambiar la fecha del calendario, sincronizamos tanto el formulario como el filtro de la vista
   useEffect(() => {
-    setNuevoAlumnoDias(obtenerDiaSemanaClave(fechaSeleccionada));
+    const diaDetectado = obtenerDiaSemanaClave(fechaSeleccionada);
+    setNuevoAlumnoDias(diaDetectado);
+    setDiaFiltroTabla(diaDetectado);
   }, [fechaSeleccionada]);
 
   const guardarDatos = async (clave, nuevosDatos) => {
@@ -145,6 +146,9 @@ export default function App() {
     const nuevos = [...alumnos, nuevo];
     setAlumnos(nuevos);
     guardarDatos('alumnos', nuevos);
+    
+    // Forzamos a la tabla a mirar el bloque de días del alumno recién creado para asegurar que lo ves aparecer
+    setDiaFiltroTabla(nuevoAlumnoDias);
     setNuevoAlumnoNombre('');
   };
 
@@ -215,12 +219,11 @@ export default function App() {
     reader.readAsBinaryString(file);
   };
 
-  // --- FILTRADO TRIPLE AVANZADO ---
-  const diaFiltroActivo = obtenerDiaSemanaClave(fechaSeleccionada);
+  // --- FILTRADO TRIPLE AVANZADO CORREGIDO ---
   const alumnosFiltrados = alumnos.filter(a => 
     a.profesor === profesorActivo && 
     a.horario === horaSeleccionada &&
-    (a.dias === diaFiltroActivo || a.dias === 'L-M-X-J-V')
+    (a.dias === diaFiltroTabla || a.dias === 'L-M-X-J-V')
   );
   
   const tarjetaEstilo = { backgroundColor: '#1e293b', padding: '20px', borderRadius: '12px', border: '1px solid #334155' };
@@ -299,6 +302,31 @@ export default function App() {
                 </div>
               </div>
 
+              {/* BARRA DE FILTRO DE VISTA DE DÍAS LECTIVOS */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '15px', padding: '10px 15px', backgroundColor: '#1e293b', borderRadius: '8px', border: '1px solid #334155' }}>
+                <span style={{ fontSize: '13px', color: '#94a3b8', fontWeight: 'bold' }}>👁️ Viendo alumnos de:</span>
+                <div style={{ display: 'flex', gap: '6px' }}>
+                  {opcionesDias.map(opt => (
+                    <button
+                      key={opt.clave}
+                      onClick={() => setDiaFiltroTabla(opt.clave)}
+                      style={{
+                        backgroundColor: diaFiltroTabla === opt.clave ? '#10b981' : '#0f172a',
+                        color: 'white',
+                        border: '1px solid #334155',
+                        padding: '6px 12px',
+                        borderRadius: '6px',
+                        fontSize: '12px',
+                        fontWeight: 'bold',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {opt.clave}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               {/* TABLA DE ASISTENCIA */}
               <div style={{ overflowX: 'auto' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
@@ -373,7 +401,7 @@ export default function App() {
                     {alumnosFiltrados.length === 0 && (
                       <tr>
                         <td colSpan="7" style={{ padding: '30px', color: '#94a3b8', textAlign: 'center', fontStyle: 'italic' }}>
-                          No hay alumnos asignados en este horario para el {diaFiltroActivo === 'L-X' ? 'Lunes/Miércoles' : diaFiltroActivo === 'M-J' ? 'Martes/Jueves' : 'Viernes'}.
+                          No hay alumnos asignados en este horario para el grupo de días "{diaFiltroTabla}".
                         </td>
                       </tr>
                     )}
