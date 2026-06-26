@@ -1,12 +1,24 @@
-<!doctype html>
-<html lang="es">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <title>Academia Pirineos - Asistencia</title>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
-  </body>
-</html>
+/* Forzar fondo oscuro en toda la aplicación */
+body, html, #root {
+  background-color: #0F172A !important;
+  color: #F8FAFC !important;
+  font-family: 'Montserrat', sans-serif !important;
+}
+
+/* Forzar que las tarjetas de los alumnos y paneles pasen a gris oscuro premium */
+div, .ap-card, border {
+  background-color: #1E293B !important;
+  color: #F8FAFC !important;
+  border-color: #334155 !important;
+}
+
+/* Mantener los textos descriptivos en gris claro elegante */
+span, p, small {
+  color: #94A3B8 !important;
+}
+
+/* Asegurar el naranja exacto de la academia en los botones principales */
+button, .active, [style*="background: rgb(255, 107, 53)"] {
+  background-color: #FF6B35 !important;
+  color: #FFFFFF !important;
+}
