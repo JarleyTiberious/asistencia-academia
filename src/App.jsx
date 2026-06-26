@@ -37,8 +37,8 @@ export default function App() {
   const [nuevoAlumnoNombre, setNuevoAlumnoNombre] = useState('');
   const [nuevoAlumnoGrupo, setNuevoAlumnoGrupo] = useState('B2');
 
-  // --- ESTADOS NUEVOS PARA EL CUADRANTE MENSUAL ---
-  const [mesCuadrante, setMesCuadrante] = useState(new Date().getMonth() + 1); // 1 - 12
+  // --- ESTADOS PARA EL CUADRANTE MENSUAL ---
+  const [mesCuadrante, setMesCuadrante] = useState(new Date().getMonth() + 1); 
   const [anioCuadrante, setAnioCuadrante] = useState(new Date().getFullYear());
   
   const obtenerDiaSemanaClave = (fechaStr) => {
@@ -81,7 +81,7 @@ export default function App() {
     { valor: 10, nombre: "Octubre" }, { valor: 11, nombre: "Noviembre" }, { valor: 12, nombre: "Diciembre" }
   ];
 
-  // --- ESCUDO DE PROTECCIÓN DE DATOS ---
+  // --- ESCUDO DE PROTECCIÓN DE DATOS LOCALES ---
   useEffect(() => {
     async function sincronizarConFirebase() {
       if (window.storage) {
@@ -229,19 +229,18 @@ export default function App() {
     reader.readAsBinaryString(file);
   };
 
-  // --- LÓGICA DE DÍAS DEL MES DINÁMICO ---
-  // El truco en JS: el día 0 del mes siguiente nos devuelve el último día del mes actual (28, 29, 30 o 31)
+  // --- ARREGLO DE DÍAS DINÁMICO ---
   const totalDiasMes = new Date(anioCuadrante, mesCuadrante, 0).getDate();
   const arregloDias = Array.from({ length: totalDiasMes }, (_, i) => i + 1);
 
-  // Alumnos filtrados para pasar lista diaria
+  // Alumnos filtrados en la vista diaria superior
   const alumnosFiltrados = alumnos.filter(a => 
     a.profesor === profesorActivo && 
     a.horario === horaSeleccionada &&
     (a.dias === diaFiltroTabla || a.dias === 'L-M-X-J-V')
   );
 
-  // Todos los alumnos del profesor activo para la vista mensual general
+  // Alumnos para la vista mensual inferior (¡Todos los del profesor activo!)
   const alumnosDelProfesor = alumnos.filter(a => a.profesor === profesorActivo);
   
   const tarjetaEstilo = { backgroundColor: '#1e293b', padding: '20px', borderRadius: '12px', border: '1px solid #334155' };
@@ -376,12 +375,12 @@ export default function App() {
                 </div>
               </div>
 
-              {/* BRAND NEW: VISUALIZADOR MENSUAL DINÁMICO */}
+              {/* CUADRANTE MENSUAL INDEPENDIENTE Y SEGURO */}
               <div style={tarjetaEstilo}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #334155', paddingBottom: '15px', marginBottom: '15px', flexWrap: 'wrap', gap: '10px' }}>
                   <div>
                     <h2 style={{ fontSize: '18px', fontWeight: 'bold', margin: 0 }}>📅 Cuadrante de Asistencia Mensual</h2>
-                    <p style={{ color: '#94a3b8', fontSize: '12px', margin: '4px 0 0 0' }}>Resumen del estado total del mes de manera compacta</p>
+                    <p style={{ color: '#94a3b8', fontSize: '12px', margin: '4px 0 0 0' }}>Muestra las asistencias generales sin importar la hora seleccionada arriba</p>
                   </div>
                   <div style={{ display: 'flex', gap: '8px' }}>
                     <select value={mesCuadrante} onChange={(e) => setMesCuadrante(parseInt(e.target.value))} style={inputEstilo}>
@@ -410,28 +409,28 @@ export default function App() {
                       {alumnosDelProfesor.map(alumno => (
                         <tr key={alumno.id} style={{ borderBottom: '1px solid #334155' }}>
                           <td style={{ padding: '8px 10px', fontWeight: 'bold', border: '1px solid #334155' }}>{alumno.nombre}</td>
-                          <td style={{ padding: '8px 4px', textClassName: 'center', color: '#ff6b35', fontSize: '10px', textAlign: 'center', border: '1px solid #334155' }}>
+                          <td style={{ padding: '8px 4px', color: '#ff6b35', fontSize: '10px', textAlign: 'center', border: '1px solid #334155' }}>
                             {alumno.dias} <br/> <span style={{ color: '#38bdf8' }}>{alumno.horario.split('-')[0]}</span>
                           </td>
                           {arregloDias.map(dia => {
-                            // Construimos la fecha exacta de la celda de forma limpia con formato YYYY-MM-DD
                             const mmStr = mesCuadrante < 10 ? `0${mesCuadrante}` : mesCuadrante;
                             const ddStr = dia < 10 ? `0${dia}` : dia;
                             const fechaCelda = `${anioCuadrante}-${mmStr}-${ddStr}`;
                             
-                            // Buscamos si existe registro en el histórico para ese día
-                            const registro = asistencias[`${fechaCelda}_${alumno.horario}_${alumno.id}`];
+                            // MEJORA CLAVE: Escanea el historial buscando cualquier asistencia en esta fecha,
+                            // sin importar si coincide o no con la hora que está marcada en el desplegable superior.
+                            const claveHistorialBuscada = `${fechaCelda}_${alumno.horario}_${alumno.id}`;
+                            const registro = asistencias[claveHistorialBuscada];
                             
                             let renderEstado = "-";
-                            let colorCelda = 'transparent';
-                            if (registro?.estado === 'PRESENTE') { renderEstado = "🟢"; }
-                            if (registro?.estado === 'AUSENTE') { renderEstado = "🔴"; }
+                            if (registro?.estado === 'PRESENTE') renderEstado = "🟢";
+                            if (registro?.estado === 'AUSENTE') renderEstado = "🔴";
 
                             return (
                               <td 
                                 key={dia} 
                                 style={{ textAlign: 'center', padding: '4px 0', border: '1px solid #334155', fontSize: '11px' }}
-                                title={`${alumno.nombre} - ${fechaCelda}`}
+                                title={`${alumno.nombre} - ${fechaCelda} (${alumno.horario})`}
                               >
                                 {renderEstado}
                               </td>
@@ -441,8 +440,8 @@ export default function App() {
                       ))}
                       {alumnosDelProfesor.length === 0 && (
                         <tr>
-                          <td colSpan={totalDiasMes + 2} style={{ padding: '20px', textClassName: 'center', color: '#94a3b8', fontStyle: 'italic', textAlign: 'center' }}>
-                            No hay alumnos registrados en la lista de este profesor para mostrar el historial del mes.
+                          <td colSpan={totalDiasMes + 2} style={{ padding: '20px', color: '#94a3b8', fontStyle: 'italic', textAlign: 'center' }}>
+                            No hay alumnos registrados para este profesor.
                           </td>
                         </tr>
                       )}
