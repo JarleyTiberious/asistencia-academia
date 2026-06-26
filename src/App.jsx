@@ -81,7 +81,7 @@ export default function App() {
     { valor: 10, nombre: "Octubre" }, { valor: 11, nombre: "Noviembre" }, { valor: 12, nombre: "Diciembre" }
   ];
 
-  // --- SINCRONIZACIÓN SEgURA CON FIREBASE ---
+  // --- SINCRO INICIAL SEGURA ---
   useEffect(() => {
     async function sincronizarConFirebase() {
       if (window.storage) {
@@ -103,7 +103,7 @@ export default function App() {
             localStorage.setItem('asistencias', JSON.stringify(datosAsistencias));
           }
         } catch (error) {
-          console.error("Firebase offline o reconectando...", error);
+          console.error("Firebase offline.", error);
         }
       }
     }
@@ -127,6 +127,7 @@ export default function App() {
     }
   };
 
+  // --- FUNCIONES DE EDICIÓN DE ALUMNOS ---
   const cambiarNivelAlumno = (id, nuevoNivel) => {
     const listaActualizada = alumnos.map(al => al.id === id ? { ...al, grupo: nuevoNivel } : al);
     setAlumnos(listaActualizada);
@@ -163,9 +164,11 @@ export default function App() {
   };
 
   const eliminarAlumno = (id) => {
-    const nuevos = alumnos.filter(a => a.id !== id);
-    setAlumnos(nuevos);
-    guardarDatos('alumnos', nuevos);
+    if (window.confirm("¿Seguro que quieres eliminar a este alumno de la lista?")) {
+      const nuevos = alumnos.filter(a => a.id !== id);
+      setAlumnos(nuevos);
+      guardarDatos('alumnos', nuevos);
+    }
   };
 
   const marcarAsistencia = (alumnoId, estado) => {
@@ -229,7 +232,7 @@ export default function App() {
     reader.readAsBinaryString(file);
   };
 
-  // --- ARREGLO DE DÍAS DINÁMICO ---
+  // --- FILTRADOS ---
   const totalDiasMes = new Date(anioCuadrante, mesCuadrante, 0).getDate();
   const arregloDias = Array.from({ length: totalDiasMes }, (_, i) => i + 1);
 
@@ -328,7 +331,7 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* TABLA ASISTENCIA DIARIA */}
+                {/* TABLA ASISTENCIA DIARIA (EDICIÓN REESTABLECIDA) */}
                 <div style={{ overflowX: 'auto' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
                     <thead>
@@ -339,7 +342,7 @@ export default function App() {
                         <th style={{ padding: '12px', textAlign: 'center' }}>Días</th>
                         <th style={{ padding: '12px', textAlign: 'center' }}>Acciones</th>
                         <th style={{ padding: '12px', textAlign: 'center' }}>Estado</th>
-                        <th style={{ padding: '12px', textAlign: 'center' }}></th>
+                        <th style={{ padding: '12px', textAlign: 'center' }}>Borrar</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -348,44 +351,64 @@ export default function App() {
                         return (
                           <tr key={a.id} style={{ borderBottom: '1px solid #334155' }}>
                             <td style={{ padding: '12px', fontWeight: 'bold' }}>{a.nombre}</td>
+                            
+                            {/* CAMBIAR GRUPO */}
                             <td style={{ padding: '12px', textAlign: 'center' }}>
-                              <select value={a.grupo} onChange={(e) => cambiarNivelAlumno(a.id, e.target.value)} style={{ backgroundColor: '#0f172a', color: '#ff6b35', padding: '4px 8px', borderRadius: '6px', border: '1px solid #ff6b35', fontSize: '12px', fontWeight: 'bold', outline: 'none', cursor: 'pointer' }}>
+                              <select value={a.grupo} onChange={(e) => cambiarNivelAlumno(a.id, e.target.value)} style={{ backgroundColor: '#0f172a', color: '#ff6b35', padding: '6px 10px', borderRadius: '6px', border: '1px solid #ff6b35', fontSize: '12px', fontWeight: 'bold', outline: 'none', cursor: 'pointer' }}>
                                 {nivelesAcademia.map(n => <option key={n} value={n}>{n}</option>)}
                               </select>
                             </td>
+
+                            {/* CAMBIAR HORARIO */}
                             <td style={{ padding: '12px', textAlign: 'center' }}>
-                              <select value={a.horario} onChange={(e) => cambiarHorarioAlumno(a.id, e.target.value)} style={{ backgroundColor: '#0f172a', color: '#38bdf8', padding: '4px 8px', borderRadius: '6px', border: '1px solid #38bdf8', fontSize: '12px', fontWeight: 'bold', outline: 'none', cursor: 'pointer' }}>
+                              <select value={a.horario} onChange={(e) => cambiarHorarioAlumno(a.id, e.target.value)} style={{ backgroundColor: '#0f172a', color: '#38bdf8', padding: '6px 10px', borderRadius: '6px', border: '1px solid #38bdf8', fontSize: '12px', fontWeight: 'bold', outline: 'none', cursor: 'pointer' }}>
                                 {horariosAcademia.map(h => <option key={h} value={h}>{h}</option>)}
                               </select>
                             </td>
+
+                            {/* CAMBIAR DÍAS */}
                             <td style={{ padding: '12px', textAlign: 'center' }}>
-                              <select value={a.dias || 'L-X'} onChange={(e) => cambiarDiasAlumno(a.id, e.target.value)} style={{ backgroundColor: '#0f172a', color: '#10b981', padding: '4px 8px', borderRadius: '6px', border: '1px solid #10b981', fontSize: '12px', fontWeight: 'bold', outline: 'none', cursor: 'pointer' }}>
+                              <select value={a.dias || 'L-X'} onChange={(e) => cambiarDiasAlumno(a.id, e.target.value)} style={{ backgroundColor: '#0f172a', color: '#10b981', padding: '6px 10px', borderRadius: '6px', border: '1px solid #10b981', fontSize: '12px', fontWeight: 'bold', outline: 'none', cursor: 'pointer' }}>
                                 {opcionesDias.map(o => <option key={o.clave} value={o.clave}>{o.clave}</option>)}
                               </select>
                             </td>
+
+                            {/* BOTONES DE PRESENTE / AUSENTE */}
                             <td style={{ padding: '12px' }}>
                               <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
                                 <button onClick={() => marcarAsistencia(a.id, 'PRESENTE')} style={{ backgroundColor: historial?.estado === 'PRESENTE' ? '#16a34a' : '#0f172a', color: historial?.estado === 'PRESENTE' ? 'white' : '#4ade80', border: '1px solid #16a34a', padding: '6px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }}>✓ PRESENTE</button>
                                 <button onClick={() => marcarAsistencia(a.id, 'AUSENTE')} style={{ backgroundColor: historial?.estado === 'AUSENTE' ? '#dc2626' : '#0f172a', color: historial?.estado === 'AUSENTE' ? 'white' : '#f87171', border: '1px solid #dc2626', padding: '6px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }}>✕ AUSENTE</button>
                               </div>
                             </td>
+
                             <td style={{ padding: '12px', textAlign: 'center', fontSize: '13px' }}>
                               {historial ? (
                                 <span style={{ fontWeight: 'bold', color: historial.estado === 'PRESENTE' ? '#4ade80' : '#f87171' }}>{historial.estado}</span>
                               ) : <span style={{ color: '#475569', fontStyle: 'italic' }}>-</span>}
                             </td>
+
+                            {/* ELIMINAR COMPLETAMENTE */}
                             <td style={{ padding: '12px', textAlign: 'center' }}>
-                              <span onClick={() => eliminarAlumno(a.id)} style={{ color: '#475569', cursor: 'pointer' }}>🗑</span>
+                              <button onClick={() => eliminarAlumno(a.id)} style={{ backgroundColor: 'transparent', border: 'none', color: '#ef4444', fontSize: '16px', cursor: 'pointer' }} title="Eliminar alumno">
+                                🗑️
+                              </button>
                             </td>
                           </tr>
                         );
                       })}
+                      {alumnosFiltrados.length === 0 && (
+                        <tr>
+                          <td colSpan={7} style={{ padding: '20px', color: '#94a3b8', fontStyle: 'italic', textAlign: 'center' }}>
+                            No hay alumnos asignados a este horario o día de asistencia.
+                          </td>
+                        </tr>
+                      )}
                     </tbody>
                   </table>
                 </div>
               </div>
 
-              {/* CUADRANTE MENSUAL CORREGIDO */}
+              {/* CUADRANTE MENSUAL */}
               <div style={tarjetaEstilo}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #334155', paddingBottom: '15px', marginBottom: '15px', flexWrap: 'wrap', gap: '10px' }}>
                   <div>
