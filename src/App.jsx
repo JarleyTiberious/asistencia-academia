@@ -51,7 +51,6 @@ export default function App() {
     "20:15-21:15"
   ];
 
-  // --- COINCIDENCIAS DE HORA POR VOZ ---
   const mapeoHorasVoz = [
     { claves: ["16", "cuatro", "16:15"], valor: "16:15-17:15" },
     { claves: ["17", "cinco", "17:15"], valor: "17:15-18:15" },
@@ -91,12 +90,23 @@ export default function App() {
     }
   };
 
+  // --- NUEVA FUNCIÓN PARA EDITAR NIVEL ---
+  const cambiarNivelAlumno = (id, nuevoNivel) => {
+    const listaActualizada = alumnos.map(alumno => {
+      if (alumno.id === id) {
+        return { ...alumno, grupo: nuevoNivel };
+      }
+      return alumno;
+    });
+    setAlumnos(listaActualizada);
+    guardarDatos('alumnos', listaActualizada);
+  };
+
   // --- PROCESADOR INTELIGENTE DE AUDIO ---
   const procesarComandoVoz = (frase) => {
     const texto = frase.toLowerCase().trim();
     setMensajeVozInfo(`Entendido: "${frase}"`);
 
-    // 1. Detectar e Intercambiar Profesor si se menciona
     let profeEncontrado = profesorActivo;
     for (const profe of profesores) {
       if (texto.includes(profe.toLowerCase())) {
@@ -106,7 +116,6 @@ export default function App() {
       }
     }
 
-    // 2. Detectar e Intercambiar Tramo Horario
     let horaEncontrada = horaSeleccionada;
     for (const mapeo of mapeoHorasVoz) {
       if (mapeo.claves.some(clave => texto.includes(clave))) {
@@ -116,7 +125,6 @@ export default function App() {
       }
     }
 
-    // 3. Buscar si coincide con el nombre de algún alumno asignado a este profesor
     const listaAlumnosFiltrados = alumnos.filter(a => a.profesor === profeEncontrado);
     let alumnoEncontrado = null;
 
@@ -127,7 +135,6 @@ export default function App() {
       }
     }
 
-    // 4. Evaluar la acción si encontramos al alumno
     if (alumnoEncontrado) {
       let estadoVoz = null;
       if (texto.includes("presente") || texto.includes("vino") || texto.includes("asiste") || texto.includes("está")) {
@@ -152,47 +159,28 @@ export default function App() {
       }
     }
 
-    // Fallback: Si no coincide con comandos de asistencia, lo escribe en el cuadro de texto para añadir nuevo alumno
     const limpio = frase.replace(/\.$/, '');
     setNuevoAlumnoNombre(limpio);
   };
 
   const activarDictadoVoz = () => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    
     if (!SpeechRecognition) {
       alert("Navegador no compatible con dictado de voz.");
       return;
     }
-
     const recognition = new SpeechRecognition();
     recognition.lang = 'es-ES';
     recognition.interimResults = false;
     recognition.maxAlternatives = 1;
-
-    recognition.onstart = () => {
-      setEscuchandoVoces(true);
-      setMensajeVozInfo('Escuchando orden de voz...');
-    };
-
-    recognition.onerror = (e) => {
-      console.error(e.error);
-      setEscuchandoVoces(false);
-    };
-
-    recognition.onend = () => {
-      setEscuchandoVoces(false);
-    };
-
-    recognition.onresult = (event) => {
-      const resultado = event.results[0][0].transcript;
-      procesarComandoVoz(resultado);
-    };
-
+    recognition.onstart = () => { setEscuchandoVoces(true); setMensajeVozInfo('Escuchando orden de voz...'); };
+    recognition.onerror = () => { setEscuchandoVoces(false); };
+    recognition.onend = () => { setEscuchandoVoces(false); };
+    recognition.onresult = (event) => { procesarComandoVoz(event.results[0][0].transcript); };
     recognition.start();
   };
 
-  // --- ACCIONES RESTANTES ---
+  // --- RESTO DE ACCIONES ---
   const agregarProfesor = () => {
     if (!nuevoProfeNombre.trim()) return;
     const nuevos = [...profesores, nuevoProfeNombre.trim()];
@@ -245,7 +233,6 @@ export default function App() {
   const importarExcel = (e) => {
     const file = e.target.files[0];
     if (!file || !profesorActivo) return;
-
     const reader = new FileReader();
     reader.onload = (evt) => {
       const data = evt.target.result;
@@ -253,11 +240,9 @@ export default function App() {
       const sheetName = workbook.SheetNames[0];
       const sheet = workbook.Sheets[sheetName];
       const listaJSON = XLSX.utils.sheet_to_json(sheet);
-
       const nuevosAlumnos = listaJSON.map((item, index) => {
         const nombreDetectado = item.Nombre || item.nombre || item.Alumno || item.alumno || item["Nombre Alumno"] || item["Apellidos y Nombre"];
         const grupoDetectado = item.Grupo || item.grupo || item.Nivel || item.nivel || "B2";
-
         return {
           id: `excel_${Date.now()}_${index}`,
           nombre: nombreDetectado ? nombreDetectado.toString().trim() : "Alumno Anónimo",
@@ -265,7 +250,6 @@ export default function App() {
           profesor: profesorActivo
         };
       });
-
       const listaActualizada = [...alumnos, ...nuevosAlumnos];
       setAlumnos(listaActualizada);
       guardarDatos('alumnos', listaActualizada);
@@ -274,7 +258,6 @@ export default function App() {
   };
 
   const alumnosFiltrados = alumnos.filter(a => a.profesor === profesorActivo);
-
   const tarjetaEstilo = { backgroundColor: '#1e293b', padding: '20px', borderRadius: '12px', border: '1px solid #334155' };
   const inputEstilo = { backgroundColor: '#0f172a', color: '#f8fafc', border: '1px solid #334155', padding: '10px', borderRadius: '8px', outline: 'none' };
   const botonNaranja = { backgroundColor: '#ff6b35', color: 'white', border: 'none', padding: '10px 15px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' };
@@ -289,16 +272,12 @@ export default function App() {
           <p style={{ color: '#94a3b8', margin: 0, fontSize: '14px' }}>Control de Asistencia Profesional por Voz</p>
         </div>
         <div>
-          <button 
-            onClick={() => setVistaAdmin(!vistaAdmin)} 
-            style={{ ...botonNaranja, backgroundColor: vistaAdmin ? '#475569' : '#ff6b35' }}
-          >
+          <button onClick={() => setVistaAdmin(!vistaAdmin)} style={{ ...botonNaranja, backgroundColor: vistaAdmin ? '#475569' : '#ff6b35' }}>
             {vistaAdmin ? '📊 Pasar Asistencia' : '⚙️ Gestionar Profes y Excel'}
           </button>
         </div>
       </div>
 
-      {/* FEEDBACK DE VOZ INTELIGENTE */}
       {mensajeVozInfo && (
         <div style={{ backgroundColor: '#1e293b', color: '#ff6b35', padding: '12px', borderRadius: '8px', marginBottom: '20px', border: '1px solid #ff6b35', fontSize: '14px', fontWeight: 'bold' }}>
           {mensajeVozInfo}
@@ -309,25 +288,16 @@ export default function App() {
         
         {/* SIDEBAR */}
         <div style={tarjetaEstilo}>
-          <h2 style={{ fontSize: '14px', fontWeight: 'bold', color: '#94a3b8', textTransform: 'uppercase', marginBottom: '15px', letterSpacing: '1px' }}>
-            Profesores Activos
-          </h2>
+          <h2 style={{ fontSize: '14px', fontWeight: 'bold', color: '#94a3b8', textTransform: 'uppercase', marginBottom: '15px', letterSpacing: '1px' }}>Profesores Activos</h2>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
             {profesores.map(p => (
               <div 
                 key={p} 
                 onClick={() => setProfesorActivo(p)}
-                style={{ 
-                  padding: '12px 15px', 
-                  backgroundColor: p === profesorActivo ? '#ff6b35' : '#0f172a', 
-                  color: p === profesorActivo ? 'white' : '#94a3b8',
-                  borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', display: 'flex', justifyContent: 'space-between', alignItems: 'center', border: '1px solid #334155'
-                }}
+                style={{ padding: '12px 15px', backgroundColor: p === profesorActivo ? '#ff6b35' : '#0f172a', color: p === profesorActivo ? 'white' : '#94a3b8', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', display: 'flex', justifyContent: 'space-between', alignItems: 'center', border: '1px solid #334155' }}
               >
                 <span>{p}</span>
-                {vistaAdmin && (
-                  <span onClick={(e) => { e.stopPropagation(); eliminarProfesor(p); }} style={{ color: '#ef4444', cursor: 'pointer' }}>✕</span>
-                )}
+                {vistaAdmin && <span onClick={(e) => { e.stopPropagation(); eliminarProfesor(p); }} style={{ color: '#ef4444', cursor: 'pointer' }}>✕</span>}
               </div>
             ))}
           </div>
@@ -335,7 +305,6 @@ export default function App() {
 
         {/* CONTENIDO PRINCIPAL */}
         <div style={{ gridColumn: 'span 2', display: 'flex', flexDirection: 'column', gap: '20px' }}>
-          
           {vistaAdmin ? (
             <div style={tarjetaEstilo}>
               <h3 style={{ fontSize: '18px', fontWeight: 'bold', marginBottom: '15px' }}>Añadir Nuevo Profesor</h3>
@@ -343,14 +312,12 @@ export default function App() {
                 <input type="text" placeholder="Nombre..." value={nuevoProfeNombre} onChange={(e) => setNuevoProfeNombre(e.target.value)} style={{ ...inputEstilo, flex: 1 }} />
                 <button onClick={agregarProfesor} style={botonNaranja}>+ Añadir</button>
               </div>
-
               <h3 style={{ fontSize: '18px', fontWeight: 'bold', marginBottom: '10px', borderTop: '1px solid #334155', paddingTop: '20px' }}>Importar Alumnos</h3>
               <input type="file" accept=".xlsx" onChange={importarExcel} disabled={!profesorActivo} style={{ color: '#94a3b8', fontSize: '14px' }} />
             </div>
           ) : (
             <div style={tarjetaEstilo}>
-              
-              {/* ACCIONES */}
+              {/* FILTROS */}
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '15px', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#0f172a', padding: '15px', borderRadius: '10px', marginBottom: '20px', border: '1px solid #334155' }}>
                 <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
                   <input type="date" value={fechaSeleccionada} onChange={(e) => setFechaSeleccionada(e.target.value)} style={{ ...inputEstilo, fontWeight: 'bold' }} />
@@ -358,18 +325,10 @@ export default function App() {
                     {horariosAcademia.map(h => <option key={h} value={h}>🕒 {h}</option>)}
                   </select>
                 </div>
-
                 <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
-                  <button
-                    onClick={activarDictadoVoz}
-                    style={{
-                      backgroundColor: escuchandoVoces ? '#ef4444' : '#1e293b',
-                      color: 'white', border: '1px solid #334155', padding: '10px 12px', borderRadius: '8px', cursor: 'pointer', fontSize: '16px'
-                    }}
-                  >
+                  <button onClick={activarDictadoVoz} style={{ backgroundColor: escuchandoVoces ? '#ef4444' : '#1e293b', color: 'white', border: '1px solid #334155', padding: '10px 12px', borderRadius: '8px', cursor: 'pointer', fontSize: '16px' }}>
                     {escuchandoVoces ? '🛑...' : '🎙️'}
                   </button>
-
                   <input type="text" placeholder={escuchandoVoces ? "Hable ahora..." : "Nuevo alumno..."} value={nuevoAlumnoNombre} onChange={(e) => setNuevoAlumnoNombre(e.target.value)} style={inputEstilo} />
                   <select value={nuevoAlumnoGrupo} onChange={(e) => setNuevoAlumnoGrupo(e.target.value)} style={{ ...inputEstilo, fontWeight: 'bold' }}>
                     {nivelesAcademia.map(nivel => <option key={nivel} value={nivel}>{nivel}</option>)}
@@ -378,13 +337,13 @@ export default function App() {
                 </div>
               </div>
 
-              {/* TABLA */}
+              {/* TABLA DE ASISTENCIA CON EDICIÓN DE NIVEL */}
               <div style={{ overflowX: 'auto' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
                   <thead>
                     <tr style={{ borderBottom: '2px solid #334155', color: '#94a3b8', fontSize: '13px' }}>
                       <th style={{ padding: '12px' }}>Alumno</th>
-                      <th style={{ padding: '12px', textAlign: 'center' }}>Nivel</th>
+                      <th style={{ padding: '12px', textAlign: 'center' }}>Nivel (Editable)</th>
                       <th style={{ padding: '12px', textAlign: 'center' }}>Acciones ({horaSeleccionada})</th>
                       <th style={{ padding: '12px', textAlign: 'center' }}>Estado</th>
                       <th style={{ padding: '12px', textAlign: 'center' }}></th>
@@ -396,9 +355,30 @@ export default function App() {
                       return (
                         <tr key={a.id} style={{ borderBottom: '1px solid #334155' }}>
                           <td style={{ padding: '12px', fontWeight: 'bold' }}>{a.nombre}</td>
+                          
+                          {/* CELDA MODIFICADA: Ahora es un selector inline */}
                           <td style={{ padding: '12px', textAlign: 'center' }}>
-                            <span style={{ backgroundColor: '#0f172a', color: '#ff6b35', padding: '3px 8px', borderRadius: '5px', fontSize: '12px', fontWeight: 'bold', border: '1px solid #ff6b35' }}>{a.grupo}</span>
+                            <select
+                              value={a.grupo}
+                              onChange={(e) => cambiarNivelAlumno(a.id, e.target.value)}
+                              style={{
+                                backgroundColor: '#0f172a',
+                                color: '#ff6b35',
+                                padding: '4px 8px',
+                                borderRadius: '6px',
+                                fontSize: '12px',
+                                fontWeight: 'bold',
+                                border: '1px solid #ff6b35',
+                                outline: 'none',
+                                cursor: 'pointer'
+                              }}
+                            >
+                              {nivelesAcademia.map(nivel => (
+                                <option key={nivel} value={nivel}>{nivel}</option>
+                              ))}
+                            </select>
                           </td>
+
                           <td style={{ padding: '12px' }}>
                             <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
                               <button onClick={() => marcarAsistencia(a.id, 'PRESENTE')} style={{ backgroundColor: historial?.estado === 'PRESENTE' ? '#16a34a' : '#0f172a', color: historial?.estado === 'PRESENTE' ? 'white' : '#4ade80', border: '1px solid #16a34a', padding: '6px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }}>✓ PRESENTE</button>
