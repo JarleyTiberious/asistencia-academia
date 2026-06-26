@@ -37,6 +37,9 @@ export default function App() {
   const [nuevoAlumnoNombre, setNuevoAlumnoNombre] = useState('');
   const [nuevoAlumnoGrupo, setNuevoAlumnoGrupo] = useState('B2');
 
+  // Estado para controlar el micrófono
+  const [escuchandoVoces, setEscuchandoVoces] = useState(false);
+
   const nivelesAcademia = [
     "Primaria", "ESO", "Bachillerato", "PAU", 
     "Mayores 25", "Acceso Grado", "B1", "B2", "C1", "APTIS"
@@ -49,7 +52,7 @@ export default function App() {
     "20:15-21:15"
   ];
 
-  // --- SCONCRÉCION Y CARGA EN SEGUNDO PLANO DE FIREBASE ---
+  // --- SINCRONIZACIÓN EN SEGUNDO PLANO DE FIREBASE ---
   useEffect(() => {
     async function sincronizarConFirebase() {
       if (window.storage) {
@@ -57,7 +60,6 @@ export default function App() {
         const datosAlumnos = await window.storage.get('alumnos');
         const datosAsistencias = await window.storage.get('asistencias');
 
-        // Si Firebase tiene datos más recientes, actualizamos la interfaz y el local
         if (datosProfes && datosProfes.length > 0) {
           setProfesores(datosProfes);
           localStorage.setItem('profesores', JSON.stringify(datosProfes));
@@ -76,15 +78,49 @@ export default function App() {
     sincronizarConFirebase();
   }, []);
 
-  // --- FUNCIÓN DE GUARDADO DUO-SEGURO ---
+  // --- FUNCIÓN DE GUARDADO PERSISTENTE ---
   const guardarDatos = async (clave, nuevosDatos) => {
-    // 1. Guardado inmediato en el navegador del usuario (F5 no lo rompe)
     localStorage.setItem(clave, JSON.stringify(nuevosDatos));
-
-    // 2. Guardado persistente en la nube de Firebase
     if (window.storage) {
       await window.storage.set(clave, nuevosDatos);
     }
+  };
+
+  // --- FUNCIÓN DE RECONOCIMIENTO DE VOZ NATIVO ---
+  const activarDictadoVoz = () => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    
+    if (!SpeechRecognition) {
+      alert("Lo siento, tu navegador no soporta el reconocimiento de voz. Prueba con Google Chrome o Microsoft Edge.");
+      return;
+    }
+
+    const recognition = new SpeechRecognition();
+    recognition.lang = 'es-ES'; // Configurado en Español
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+
+    recognition.onstart = () => {
+      setEscuchandoVoces(true);
+    };
+
+    recognition.onerror = (event) => {
+      console.error("Error en el reconocimiento de voz: ", event.error);
+      setEscuchandoVoces(false);
+    };
+
+    recognition.onend = () => {
+      setEscuchandoVoces(false);
+    };
+
+    recognition.onresult = (event) => {
+      const textoEscuchado = event.results[0][0].transcript;
+      // Quitamos el punto final que suelen añadir los asistentes automáticos
+      const limpio = textoEscuchado.replace(/\.$/, '');
+      setNuevoAlumnoNombre(limpio);
+    };
+
+    recognition.start();
   };
 
   // --- ACCIONES DE GESTIÓN ---
@@ -268,7 +304,7 @@ export default function App() {
           ) : (
             <div style={tarjetaEstilo}>
               
-              {/* FILTROS */}
+              {/* FILTROS Y ALTAS CON MICRÓFONO */}
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '15px', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#0f172a', padding: '15px', borderRadius: '10px', marginBottom: '20px', border: '1px solid #334155' }}>
                 <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
                   <input 
@@ -288,10 +324,28 @@ export default function App() {
                   </select>
                 </div>
 
-                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+                  {/* BOTÓN DE MICRÓFONO INTEGRADO */}
+                  <button
+                    onClick={activarDictadoVoz}
+                    title="Dictar nombre por voz"
+                    style={{
+                      backgroundColor: escuchandoVoces ? '#ef4444' : '#1e293b',
+                      color: 'white',
+                      border: '1px solid #334155',
+                      padding: '10px 12px',
+                      borderRadius: '8px',
+                      cursor: 'pointer',
+                      fontSize: '16px',
+                      animation: escuchandoVoces ? 'pulse 1s infinite' : 'none'
+                    }}
+                  >
+                    {escuchandoVoces ? '🛑...' : '🎙️'}
+                  </button>
+
                   <input 
                     type="text" 
-                    placeholder="Nuevo alumno..." 
+                    placeholder={escuchandoVoces ? "Escuchando..." : "Nuevo alumno..."} 
                     value={nuevoAlumnoNombre}
                     onChange={(e) => setNuevoAlumnoNombre(e.target.value)}
                     style={inputEstilo}
