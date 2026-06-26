@@ -19,7 +19,7 @@ const db = getFirestore(app);
 window.storage = {
   async get(key) {
     try {
-      const docRef = doc(db, "academia", key);
+      const docRef = doc(db, "asistencia", key);
       const docSnap = await getDoc(docRef);
       if (docSnap.exists()) {
         return { value: docSnap.data().value };
@@ -32,7 +32,7 @@ window.storage = {
   },
   async set(key, value) {
     try {
-      const docRef = doc(db, "academia", key);
+      const docRef = doc(db, "asistencia", key);
       await setDoc(docRef, { value: value }, { merge: true });
       return true;
     } catch (error) {
