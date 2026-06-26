@@ -36,7 +36,7 @@ export default function App() {
   const [nuevoProfeNombre, setNuevoProfeNombre] = useState('');
   const [nuevoAlumnoNombre, setNuevoAlumnoNombre] = useState('');
   const [nuevoAlumnoGrupo, setNuevoAlumnoGrupo] = useState('B2');
-  const [nuevoAlumnoDias, setNuevoAlumnoDias] = useState('L-X'); // Estado por defecto para nuevos alumnos
+  const [nuevoAlumnoDias, setNuevoAlumnoDias] = useState('L-X'); 
   const [escuchandoVoces, setEscuchandoVoces] = useState(false);
   const [mensajeVozInfo, setMensajeVozInfo] = useState('');
 
@@ -52,7 +52,6 @@ export default function App() {
     "20:15-21:15"
   ];
 
-  // Opciones de días laborables en la academia
   const opcionesDias = [
     { clave: "L-X", texto: "Lunes y Miércoles" },
     { clave: "M-J", texto: "Martes y Jueves" },
@@ -99,18 +98,16 @@ export default function App() {
     }
   };
 
-  // --- OBTENER EL DÍA DE LA SEMANA SEGÚN LA FECHA ---
   const obtenerDiaSemanaClave = (fechaStr) => {
     const fecha = new Date(fechaStr);
-    const numeroDia = fecha.getDay(); // 0 = Domingo, 1 = Lunes, 2 = Martes, 3 = Miércoles, 4 = Jueves, 5 = Viernes, 6 = Sábado
+    const numeroDia = fecha.getDay(); 
     
-    if (numeroDia === 1 || numeroDia === 3) return "L-X"; // Lunes o Miércoles
-    if (numeroDia === 2 || numeroDia === 4) return "M-J"; // Martes o Jueves
-    if (numeroDia === 5) return "V"; // Viernes
-    return "L-X"; // Fallback por defecto
+    if (numeroDia === 1 || numeroDia === 3) return "L-X"; 
+    if (numeroDia === 2 || numeroDia === 4) return "M-J"; 
+    if (numeroDia === 5) return "V"; 
+    return "L-X"; 
   };
 
-  // --- ACCIONES DE EDICIÓN INLINE ---
   const cambiarNivelAlumno = (id, nuevoNivel) => {
     const listaActualizada = alumnos.map(al => al.id === id ? { ...al, grupo: nuevoNivel } : al);
     setAlumnos(listaActualizada);
@@ -212,7 +209,7 @@ export default function App() {
     recognition.start();
   };
 
-  // --- RESTO DE ACCIONES GESTIÓN ---
+  // --- ACCIONES GESTIÓN ---
   const agregarProfesor = () => {
     if (!nuevoProfeNombre.trim()) return;
     const nuevos = [...profesores, nuevoProfeNombre.trim()];
@@ -237,7 +234,7 @@ export default function App() {
       grupo: nuevoAlumnoGrupo,
       profesor: profesorActivo,
       horario: horaSeleccionada,
-      dias: nuevoAlumnoDias // Guarda la combinación de días seleccionada
+      dias: nuevoAlumnoDias 
     };
     const nuevos = [...alumnos, nuevo];
     setAlumnos(nuevos);
@@ -296,7 +293,7 @@ export default function App() {
     reader.readAsBinaryString(file);
   };
 
-  // --- FILTRADO TRIPLE AVANZADO: PROFESOR + HORARIO + DÍA DE LA SEMANA ---
+  // --- FILTRADO TRIPLE AVANZADO ---
   const diaFiltroActivo = obtenerDiaSemanaClave(fechaSeleccionada);
   const alumnosFiltrados = alumnos.filter(a => 
     a.profesor === profesorActivo && 
@@ -381,9 +378,9 @@ export default function App() {
                     {nivelesAcademia.map(nivel => <option key={nivel} value={nivel}>{nivel}</option>)}
                   </select>
 
-                  {/* NUEVO SELECTOR DE DÍAS AL CREAR */}
+                  {/* SELECTOR DE DÍAS CORREGIDO (Sin emojis en el value) */}
                   <select value={nuevoAlumnoDias} onChange={(e) => setNuevoAlumnoDias(e.target.value)} style={{ ...inputEstilo, fontWeight: 'bold', borderColor: '#10b981' }}>
-                    {opcionesDias.map(opt => <option key={opt.clave} value={opt.clave}>📅 {opt.texto}</option>)}
+                    {opcionesDias.map(opt => <option key={opt.clave} value={opt.clave}>{opt.texto}</option>)}
                   </select>
 
                   <button onClick={agregarAlumno} style={botonNaranja}>+</button>
@@ -431,7 +428,6 @@ export default function App() {
                             </select>
                           </td>
 
-                          {/* NUEVA COLUMNA: SELECCIÓN DE DÍAS EDITABLE */}
                           <td style={{ padding: '12px', textAlign: 'center' }}>
                             <select
                               value={a.dias || 'L-X'}
