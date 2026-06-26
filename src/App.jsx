@@ -90,11 +90,23 @@ export default function App() {
     }
   };
 
-  // --- NUEVA FUNCIÓN PARA EDITAR NIVEL ---
+  // --- CAMBIAR NIVEL DE UN ALUMNO ---
   const cambiarNivelAlumno = (id, nuevoNivel) => {
     const listaActualizada = alumnos.map(alumno => {
       if (alumno.id === id) {
         return { ...alumno, grupo: nuevoNivel };
+      }
+      return alumno;
+    });
+    setAlumnos(listaActualizada);
+    guardarDatos('alumnos', listaActualizada);
+  };
+
+  // --- NUEVA FUNCIÓN: CAMBIAR HORARIO ASIGNADO A UN ALUMNO ---
+  const cambiarHorarioAlumno = (id, nuevoHorario) => {
+    const listaActualizada = alumnos.map(alumno => {
+      if (alumno.id === id) {
+        return { ...alumno, horario: nuevoHorario };
       }
       return alumno;
     });
@@ -125,7 +137,8 @@ export default function App() {
       }
     }
 
-    const listaAlumnosFiltrados = alumnos.filter(a => a.profesor === profeEncontrado);
+    // El filtro de voz ahora busca alumnos que coincidan en el profesor y su hora asignada
+    const listaAlumnosFiltrados = alumnos.filter(a => a.profesor === profeEncontrado && a.horario === horaEncontrada);
     let alumnoEncontrado = null;
 
     for (const alumno of listaAlumnosFiltrados) {
@@ -203,7 +216,8 @@ export default function App() {
       id: Date.now().toString(),
       nombre: nuevoAlumnoNombre.trim(),
       grupo: nuevoAlumnoGrupo,
-      profesor: profesorActivo
+      profesor: profesorActivo,
+      horario: horaSeleccionada // <-- Se le asigna automáticamente la hora que tienes filtrada en pantalla
     };
     const nuevos = [...alumnos, nuevo];
     setAlumnos(nuevos);
@@ -243,11 +257,13 @@ export default function App() {
       const nuevosAlumnos = listaJSON.map((item, index) => {
         const nombreDetectado = item.Nombre || item.nombre || item.Alumno || item.alumno || item["Nombre Alumno"] || item["Apellidos y Nombre"];
         const grupoDetectado = item.Grupo || item.grupo || item.Nivel || item.nivel || "B2";
+        const horarioDetectado = item.Horario || item.horario || item.Hora || item.hora || horaSeleccionada;
         return {
           id: `excel_${Date.now()}_${index}`,
           nombre: nombreDetectado ? nombreDetectado.toString().trim() : "Alumno Anónimo",
           grupo: grupoDetectado.toString().trim(),
-          profesor: profesorActivo
+          profesor: profesorActivo,
+          horario: horarioDetectado.toString().trim() // Si el Excel trae columna de Horario, lo respeta. Si no, le mete la actual.
         };
       });
       const listaActualizada = [...alumnos, ...nuevosAlumnos];
@@ -257,7 +273,9 @@ export default function App() {
     reader.readAsBinaryString(file);
   };
 
-  const alumnosFiltrados = alumnos.filter(a => a.profesor === profesorActivo);
+  // --- FILTRADO DOBLE CLAVE: PROFESOR + HORARIO SELECCIONADO ---
+  const alumnosFiltrados = alumnos.filter(a => a.profesor === profesorActivo && a.horario === horaSeleccionada);
+  
   const tarjetaEstilo = { backgroundColor: '#1e293b', padding: '20px', borderRadius: '12px', border: '1px solid #334155' };
   const inputEstilo = { backgroundColor: '#0f172a', color: '#f8fafc', border: '1px solid #334155', padding: '10px', borderRadius: '8px', outline: 'none' };
   const botonNaranja = { backgroundColor: '#ff6b35', color: 'white', border: 'none', padding: '10px 15px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' };
@@ -337,14 +355,15 @@ export default function App() {
                 </div>
               </div>
 
-              {/* TABLA DE ASISTENCIA CON EDICIÓN DE NIVEL */}
+              {/* TABLA DE ASISTENCIA */}
               <div style={{ overflowX: 'auto' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
                   <thead>
                     <tr style={{ borderBottom: '2px solid #334155', color: '#94a3b8', fontSize: '13px' }}>
                       <th style={{ padding: '12px' }}>Alumno</th>
-                      <th style={{ padding: '12px', textAlign: 'center' }}>Nivel (Editable)</th>
-                      <th style={{ padding: '12px', textAlign: 'center' }}>Acciones ({horaSeleccionada})</th>
+                      <th style={{ padding: '12px', textAlign: 'center' }}>Nivel</th>
+                      <th style={{ padding: '12px', textAlign: 'center' }}>Horario (Editable)</th>
+                      <th style={{ padding: '12px', textAlign: 'center' }}>Acciones</th>
                       <th style={{ padding: '12px', textAlign: 'center' }}>Estado</th>
                       <th style={{ padding: '12px', textAlign: 'center' }}></th>
                     </tr>
@@ -356,26 +375,24 @@ export default function App() {
                         <tr key={a.id} style={{ borderBottom: '1px solid #334155' }}>
                           <td style={{ padding: '12px', fontWeight: 'bold' }}>{a.nombre}</td>
                           
-                          {/* CELDA MODIFICADA: Ahora es un selector inline */}
                           <td style={{ padding: '12px', textAlign: 'center' }}>
                             <select
                               value={a.grupo}
                               onChange={(e) => cambiarNivelAlumno(a.id, e.target.value)}
-                              style={{
-                                backgroundColor: '#0f172a',
-                                color: '#ff6b35',
-                                padding: '4px 8px',
-                                borderRadius: '6px',
-                                fontSize: '12px',
-                                fontWeight: 'bold',
-                                border: '1px solid #ff6b35',
-                                outline: 'none',
-                                cursor: 'pointer'
-                              }}
+                              style={{ backgroundColor: '#0f172a', color: '#ff6b35', padding: '4px 8px', borderRadius: '6px', fontSize: '12px', fontWeight: 'bold', border: '1px solid #ff6b35', outline: 'none', cursor: 'pointer' }}
                             >
-                              {nivelesAcademia.map(nivel => (
-                                <option key={nivel} value={nivel}>{nivel}</option>
-                              ))}
+                              {nivelesAcademia.map(nivel => <option key={nivel} value={nivel}>{nivel}</option>)}
+                            </select>
+                          </td>
+
+                          {/* NUEVA COLUMNA: HORARIO EDITABLE POR ALUMNO */}
+                          <td style={{ padding: '12px', textAlign: 'center' }}>
+                            <select
+                              value={a.horario}
+                              onChange={(e) => cambiarHorarioAlumno(a.id, e.target.value)}
+                              style={{ backgroundColor: '#0f172a', color: '#38bdf8', padding: '4px 8px', borderRadius: '6px', fontSize: '12px', fontWeight: 'bold', border: '1px solid #38bdf8', outline: 'none', cursor: 'pointer' }}
+                            >
+                              {horariosAcademia.map(h => <option key={h} value={h}>🕒 {h}</option>)}
                             </select>
                           </td>
 
@@ -399,6 +416,13 @@ export default function App() {
                         </tr>
                       );
                     })}
+                    {alumnosFiltrados.length === 0 && (
+                      <tr>
+                        <td colSpan="6" style={{ padding: '30px', color: '#94a3b8', textAlign: 'center', fontStyle: 'italic' }}>
+                          No hay alumnos asignados a este profesor en el horario de {horaSeleccionada}.
+                        </td>
+                      </tr>
+                    )}
                   </tbody>
                 </table>
               </div>
