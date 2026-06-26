@@ -1,7 +1,7 @@
+import './storage.js'; // <-- Esto TIENE que estar en la primera línea obligatoriamente
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './App.jsx'
-import './storage.js'
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
