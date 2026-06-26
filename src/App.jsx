@@ -16,6 +16,12 @@ export default function App() {
   const [nuevoAlumnoNombre, setNuevoAlumnoNombre] = useState('');
   const [nuevoAlumnoGrupo, setNuevoAlumnoGrupo] = useState('B2');
 
+  // --- LISTA DE NIVELES DE LA ACADEMIA ---
+  const nivelesAcademia = [
+    "Primaria", "ESO", "Bachillerato", "PAU", 
+    "Mayores 25", "Acceso Grado", "B1", "B2", "C1", "APTIS"
+  ];
+
   // --- CARGA DESDE FIREBASE ---
   useEffect(() => {
     async function cargarDatos() {
@@ -92,6 +98,7 @@ export default function App() {
     guardarEnFirebase('asistencias', nuevas);
   };
 
+  // --- IMPORTADOR DE EXCEL INTELIGENTE ---
   const importarExcel = (e) => {
     const file = e.target.files[0];
     if (!file || !profesorActivo) return;
@@ -104,12 +111,18 @@ export default function App() {
       const sheet = workbook.Sheets[sheetName];
       const listaJSON = XLSX.utils.sheet_to_json(sheet);
 
-      const nuevosAlumnos = listaJSON.map((item, index) => ({
-        id: `excel_${Date.now()}_${index}`,
-        nombre: item.Nombre || item.nombre || "Alumno Anónimo",
-        grupo: item.Grupo || item.grupo || "B2",
-        profesor: profesorActivo
-      }));
+      const nuevosAlumnos = listaJSON.map((item, index) => {
+        // Busca variaciones comunes de títulos de columna
+        const nombreDetectado = item.Nombre || item.nombre || item.Alumno || item.alumno || item["Nombre Alumno"] || item["Apellidos y Nombre"];
+        const grupoDetectado = item.Grupo || item.grupo || item.Nivel || item.nivel || "B2";
+
+        return {
+          id: `excel_${Date.now()}_${index}`,
+          nombre: nombreDetectado ? nombreDetectado.toString().trim() : "Alumno Anónimo",
+          grupo: grupoDetectado.toString().trim(),
+          profesor: profesorActivo
+        };
+      });
 
       const listaActualizada = [...alumnos, ...nuevosAlumnos];
       setAlumnos(listaActualizada);
@@ -120,7 +133,7 @@ export default function App() {
 
   const alumnosFiltrados = alumnos.filter(a => a.profesor === profesorActivo);
 
-  // --- ESTILOS COMPARTIDOS ---
+  // --- ESTILOS NATIVOS ---
   const tarjetaEstilo = { backgroundColor: '#1e293b', padding: '20px', borderRadius: '12px', border: '1px solid #334155' };
   const inputEstilo = { backgroundColor: '#0f172a', color: '#f8fafc', border: '1px solid #334155', padding: '10px', borderRadius: '8px', outline: 'none' };
   const botonNaranja = { backgroundColor: '#ff6b35', color: 'white', border: 'none', padding: '10px 15px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' };
@@ -129,7 +142,7 @@ export default function App() {
     <div style={{ backgroundColor: '#0f172a', minHeight: '100vh', color: '#f8fafc', padding: '20px', fontFamily: 'sans-serif' }}>
       
       {/* HEADER */}
-      <div style={{ ...tarjetaEstilo, display: 'flex', justifyContent: 'between', alignItems: 'center', flexWrap: 'wrap', gap: '15px', marginBottom: '20px' }}>
+      <div style={{ ...tarjetaEstilo, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '15px', marginBottom: '20px' }}>
         <div style={{ flex: 1 }}>
           <h1 style={{ fontSize: '26px', fontWeight: 'bold', margin: '0 0 5px 0', trackingTight: 'tight' }}>ACADEMIA PIRINEOS</h1>
           <p style={{ color: '#94a3b8', margin: 0, fontSize: '14px' }}>Control de Asistencia Profesional</p>
@@ -146,12 +159,12 @@ export default function App() {
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '20px', alignItems: 'start' }}>
         
-        {/* SIDEBAR: PROFESORES */}
+        {/* SIDEBAR */}
         <div style={tarjetaEstilo}>
           <h2 style={{ fontSize: '14px', fontWeight: 'bold', color: '#94a3b8', textTransform: 'uppercase', marginBottom: '15px', letterSpacing: '1px' }}>
             Profesores Activos
           </h2>
-          <div style={{ display: 'flex', flexSpread: 'column', flexDirection: 'column', gap: '8px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
             {profesores.map(p => (
               <div 
                 key={p} 
@@ -173,22 +186,21 @@ export default function App() {
                 {vistaAdmin && (
                   <span 
                     onClick={(e) => { e.stopPropagation(); eliminarProfesor(p); }} 
-                    style={{ color: '#ef4444', marginLeft: '10px', fontSize: '14px', cursor: 'pointer' }}
+                    style={{ color: '#ef4444', fontSize: '14px', cursor: 'pointer' }}
                   >
                     ✕
                   </span>
                 )}
               </div>
             ))}
-            {profesores.length === 0 && <p style={{ fontSize: '14px', color: '#94a3b8', textAlign: 'center', italic: 'true' }}>No hay profesores.</p>}
+            {profesores.length === 0 && <p style={{ fontSize: '14px', color: '#94a3b8', textAlign: 'center', fontStyle: 'italic' }}>No hay profesores.</p>}
           </div>
         </div>
 
-        {/* CONTENIDO CENTRAL */}
+        {/* CONTENIDO PRINCIPAL */}
         <div style={{ gridColumn: 'span 2', display: 'flex', flexDirection: 'column', gap: '20px' }}>
           
           {vistaAdmin ? (
-            /* VISTA CONFIGURACIÓN */
             <div style={tarjetaEstilo}>
               <h3 style={{ fontSize: '18px', fontWeight: 'bold', marginBottom: '15px' }}>Añadir Nuevo Profesor</h3>
               <div style={{ display: 'flex', gap: '10px', marginBottom: '25px' }}>
@@ -206,7 +218,7 @@ export default function App() {
                 Importar Alumnos desde Excel
               </h3>
               <p style={{ color: '#94a3b8', fontSize: '14px', marginBottom: '15px' }}>
-                Sube tu archivo <strong>.xlsx</strong> con las columnas <code>Nombre</code> y <code>Grupo</code>. Se vincularán a <strong>{profesorActivo || 'ningún profesor'}</strong>.
+                Sube tu archivo <strong>.xlsx</strong>. El sistema leerá automáticamente columnas de nombre (Nombre, Alumno...) y se vincularán a <strong>{profesorActivo || 'ningún profesor'}</strong>.
               </p>
               <input 
                 type="file" 
@@ -217,10 +229,9 @@ export default function App() {
               />
             </div>
           ) : (
-            /* VISTA ASISTENCIA */
             <div style={tarjetaEstilo}>
               
-              {/* ACCIONES RÁPIDAS ALUMNO Y FECHA */}
+              {/* ALTAS Y FECHA */}
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '15px', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#0f172a', padding: '15px', borderRadius: '10px', marginBottom: '20px', border: '1px solid #334155' }}>
                 <input 
                   type="date" 
@@ -228,7 +239,7 @@ export default function App() {
                   onChange={(e) => setFechaSeleccionada(e.target.value)} 
                   style={{ ...inputEstilo, fontWeight: 'bold' }}
                 />
-                <div style={{ display: 'flex', gap: '8px' }}>
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                   <input 
                     type="text" 
                     placeholder="Nuevo alumno..." 
@@ -241,15 +252,15 @@ export default function App() {
                     onChange={(e) => setNuevoAlumnoGrupo(e.target.value)}
                     style={{ ...inputEstilo, fontWeight: 'bold' }}
                   >
-                    <option value="B1">B1</option>
-                    <option value="B2">B2</option>
-                    <option value="C1">C1</option>
+                    {nivelesAcademia.map(nivel => (
+                      <option key={nivel} value={nivel}>{nivel}</option>
+                    ))}
                   </select>
                   <button onClick={agregarAlumno} style={botonNaranja}>+</button>
                 </div>
               </div>
 
-              {/* TABLA */}
+              {/* TABLA ASISTENCIA */}
               <div style={{ overflowX: 'auto' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
                   <thead>
@@ -302,7 +313,7 @@ export default function App() {
                                 <span style={{ fontWeight: 'bold', color: historial.estado === 'PRESENTE' ? '#4ade80' : '#f87171' }}>{historial.estado}</span>
                                 <div style={{ fontSize: '10px', color: '#94a3b8', marginTop: '2px' }}>⏱ {historial.hora}</div>
                               </div>
-                            ) : <span style={{ color: '#475569', italic: 'true' }}>Sin registro</span>}
+                            ) : <span style={{ color: '#475569', fontStyle: 'italic' }}>Sin registro</span>}
                           </td>
                           <td style={{ padding: '12px', textAlign: 'center' }}>
                             <span onClick={() => eliminarAlumno(a.id)} style={{ color: '#475569', cursor: 'pointer' }}>🗑</span>
@@ -312,7 +323,7 @@ export default function App() {
                     })}
                     {alumnosFiltrados.length === 0 && (
                       <tr>
-                        <td colSpan="5" style={{ padding: '30px', textTransform: 'none', color: '#94a3b8', textAlign: 'center', fontStyle: 'italic' }}>
+                        <td colSpan="5" style={{ padding: '30px', color: '#94a3b8', textAlign: 'center', fontStyle: 'italic' }}>
                           No hay alumnos registrados con este profesor.
                         </td>
                       </tr>
