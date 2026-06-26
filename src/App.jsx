@@ -37,7 +37,6 @@ export default function App() {
   const [nuevoAlumnoNombre, setNuevoAlumnoNombre] = useState('');
   const [nuevoAlumnoGrupo, setNuevoAlumnoGrupo] = useState('B2');
 
-  // --- ESTADOS PARA EL CUADRANTE MENSUAL ---
   const [mesCuadrante, setMesCuadrante] = useState(new Date().getMonth() + 1); 
   const [anioCuadrante, setAnioCuadrante] = useState(new Date().getFullYear());
   
@@ -81,7 +80,6 @@ export default function App() {
     { valor: 10, nombre: "Octubre" }, { valor: 11, nombre: "Noviembre" }, { valor: 12, nombre: "Diciembre" }
   ];
 
-  // --- SINCRO INICIAL SEGURA ---
   useEffect(() => {
     async function sincronizarConFirebase() {
       if (window.storage) {
@@ -127,7 +125,6 @@ export default function App() {
     }
   };
 
-  // --- FUNCIONES DE EDICIÓN DE ALUMNOS ---
   const cambiarNivelAlumno = (id, nuevoNivel) => {
     const listaActualizada = alumnos.map(al => al.id === id ? { ...al, grupo: nuevoNivel } : al);
     setAlumnos(listaActualizada);
@@ -232,15 +229,23 @@ export default function App() {
     reader.readAsBinaryString(file);
   };
 
-  // --- FILTRADOS ---
   const totalDiasMes = new Date(anioCuadrante, mesCuadrante, 0).getDate();
   const arregloDias = Array.from({ length: totalDiasMes }, (_, i) => i + 1);
 
-  const alumnosFiltrados = alumnos.filter(a => 
-    a.profesor === profesorActivo && 
-    a.horario === horaSeleccionada &&
-    (a.dias === diaFiltroTabla || a.dias === 'L-M-X-J-V')
-  );
+  // --- FILTRO INTELIGENTE ANTI-FANTASMAS ---
+  const alumnosFiltrados = alumnos.filter(a => {
+    if (a.profesor !== profesorActivo) return false;
+
+    // Si es un "alumno fantasma" creado en versiones antiguas sin datos, 
+    // LO MOSTRAMOS SIEMPRE para que puedas asignarle un horario o borrarlo.
+    if (!a.horario || !a.dias) return true;
+
+    // Si está todo correcto, aplicamos los filtros normales
+    const coincideHora = a.horario === horaSeleccionada;
+    const coincideDia = a.dias === diaFiltroTabla || a.dias === 'L-M-X-J-V';
+
+    return coincideHora && coincideDia;
+  });
 
   const alumnosDelProfesor = alumnos.filter(a => a.profesor === profesorActivo);
   
@@ -251,7 +256,6 @@ export default function App() {
   return (
     <div style={{ backgroundColor: '#0f172a', minHeight: '100vh', color: '#f8fafc', padding: '20px', fontFamily: 'sans-serif' }}>
       
-      {/* HEADER */}
       <div style={{ ...tarjetaEstilo, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '15px', marginBottom: '20px' }}>
         <div style={{ flex: 1 }}>
           <h1 style={{ fontSize: '26px', fontWeight: 'bold', margin: '0 0 5px 0' }}>ACADEMIA PIRINEOS</h1>
@@ -266,7 +270,6 @@ export default function App() {
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '20px', alignItems: 'start' }}>
         
-        {/* SIDEBAR */}
         <div style={tarjetaEstilo}>
           <h2 style={{ fontSize: '14px', fontWeight: 'bold', color: '#94a3b8', textTransform: 'uppercase', marginBottom: '15px', letterSpacing: '1px' }}>Profesores Activos</h2>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -283,7 +286,6 @@ export default function App() {
           </div>
         </div>
 
-        {/* CONTENIDO PRINCIPAL */}
         <div style={{ gridColumn: 'span 2', display: 'flex', flexDirection: 'column', gap: '20px' }}>
           {vistaAdmin ? (
             <div style={tarjetaEstilo}>
@@ -297,7 +299,6 @@ export default function App() {
             </div>
           ) : (
             <>
-              {/* PANEL DIARIO */}
               <div style={tarjetaEstilo}>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '15px', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#0f172a', padding: '15px', borderRadius: '10px', marginBottom: '20px', border: '1px solid #334155' }}>
                   <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
@@ -321,7 +322,6 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* FILTROS DÍAS LECTIVOS */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '15px', padding: '10px 15px', backgroundColor: '#0f172a', borderRadius: '8px', border: '1px solid #334155' }}>
                   <span style={{ fontSize: '13px', color: '#94a3b8', fontWeight: 'bold' }}>👁️ Pasar lista de:</span>
                   <div style={{ display: 'flex', gap: '6px' }}>
@@ -331,7 +331,6 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* TABLA ASISTENCIA DIARIA (EDICIÓN REESTABLECIDA) */}
                 <div style={{ overflowX: 'auto' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
                     <thead>
@@ -350,30 +349,31 @@ export default function App() {
                         const historial = asistencias[`${fechaSeleccionada}_${horaSeleccionada}_${a.id}`];
                         return (
                           <tr key={a.id} style={{ borderBottom: '1px solid #334155' }}>
-                            <td style={{ padding: '12px', fontWeight: 'bold' }}>{a.nombre}</td>
+                            <td style={{ padding: '12px', fontWeight: 'bold' }}>
+                              {a.nombre}
+                              {(!a.horario || !a.dias) && <span style={{ marginLeft: '8px', fontSize: '10px', color: '#ef4444' }}>(Incompleto)</span>}
+                            </td>
                             
-                            {/* CAMBIAR GRUPO */}
                             <td style={{ padding: '12px', textAlign: 'center' }}>
                               <select value={a.grupo} onChange={(e) => cambiarNivelAlumno(a.id, e.target.value)} style={{ backgroundColor: '#0f172a', color: '#ff6b35', padding: '6px 10px', borderRadius: '6px', border: '1px solid #ff6b35', fontSize: '12px', fontWeight: 'bold', outline: 'none', cursor: 'pointer' }}>
                                 {nivelesAcademia.map(n => <option key={n} value={n}>{n}</option>)}
                               </select>
                             </td>
 
-                            {/* CAMBIAR HORARIO */}
                             <td style={{ padding: '12px', textAlign: 'center' }}>
-                              <select value={a.horario} onChange={(e) => cambiarHorarioAlumno(a.id, e.target.value)} style={{ backgroundColor: '#0f172a', color: '#38bdf8', padding: '6px 10px', borderRadius: '6px', border: '1px solid #38bdf8', fontSize: '12px', fontWeight: 'bold', outline: 'none', cursor: 'pointer' }}>
+                              <select value={a.horario || ''} onChange={(e) => cambiarHorarioAlumno(a.id, e.target.value)} style={{ backgroundColor: '#0f172a', color: '#38bdf8', padding: '6px 10px', borderRadius: '6px', border: '1px solid #38bdf8', fontSize: '12px', fontWeight: 'bold', outline: 'none', cursor: 'pointer' }}>
+                                {!a.horario && <option value="" disabled>Sin hora</option>}
                                 {horariosAcademia.map(h => <option key={h} value={h}>{h}</option>)}
                               </select>
                             </td>
 
-                            {/* CAMBIAR DÍAS */}
                             <td style={{ padding: '12px', textAlign: 'center' }}>
-                              <select value={a.dias || 'L-X'} onChange={(e) => cambiarDiasAlumno(a.id, e.target.value)} style={{ backgroundColor: '#0f172a', color: '#10b981', padding: '6px 10px', borderRadius: '6px', border: '1px solid #10b981', fontSize: '12px', fontWeight: 'bold', outline: 'none', cursor: 'pointer' }}>
+                              <select value={a.dias || ''} onChange={(e) => cambiarDiasAlumno(a.id, e.target.value)} style={{ backgroundColor: '#0f172a', color: '#10b981', padding: '6px 10px', borderRadius: '6px', border: '1px solid #10b981', fontSize: '12px', fontWeight: 'bold', outline: 'none', cursor: 'pointer' }}>
+                                {!a.dias && <option value="" disabled>Sin días</option>}
                                 {opcionesDias.map(o => <option key={o.clave} value={o.clave}>{o.clave}</option>)}
                               </select>
                             </td>
 
-                            {/* BOTONES DE PRESENTE / AUSENTE */}
                             <td style={{ padding: '12px' }}>
                               <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
                                 <button onClick={() => marcarAsistencia(a.id, 'PRESENTE')} style={{ backgroundColor: historial?.estado === 'PRESENTE' ? '#16a34a' : '#0f172a', color: historial?.estado === 'PRESENTE' ? 'white' : '#4ade80', border: '1px solid #16a34a', padding: '6px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }}>✓ PRESENTE</button>
@@ -387,7 +387,6 @@ export default function App() {
                               ) : <span style={{ color: '#475569', fontStyle: 'italic' }}>-</span>}
                             </td>
 
-                            {/* ELIMINAR COMPLETAMENTE */}
                             <td style={{ padding: '12px', textAlign: 'center' }}>
                               <button onClick={() => eliminarAlumno(a.id)} style={{ backgroundColor: 'transparent', border: 'none', color: '#ef4444', fontSize: '16px', cursor: 'pointer' }} title="Eliminar alumno">
                                 🗑️
