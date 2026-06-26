@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 
 export default function App() {
-  // --- ARRANCAR ESTADOS DIRECTAMENTE DESDE LOCALSTORAGE (INMUNE A F5) ---
+  // --- ESTADOS INICIALES DESDE LOCALSTORAGE ---
   const [profesores, setProfesores] = useState(() => {
     const locales = localStorage.getItem('profesores');
     return locales ? JSON.parse(locales) : [];
@@ -36,9 +36,8 @@ export default function App() {
   const [nuevoProfeNombre, setNuevoProfeNombre] = useState('');
   const [nuevoAlumnoNombre, setNuevoAlumnoNombre] = useState('');
   const [nuevoAlumnoGrupo, setNuevoAlumnoGrupo] = useState('B2');
-
-  // Estado para controlar el micrófono
   const [escuchandoVoces, setEscuchandoVoces] = useState(false);
+  const [mensajeVozInfo, setMensajeVozInfo] = useState('');
 
   const nivelesAcademia = [
     "Primaria", "ESO", "Bachillerato", "PAU", 
@@ -52,7 +51,14 @@ export default function App() {
     "20:15-21:15"
   ];
 
-  // --- SINCRONIZACIÓN EN SEGUNDO PLANO DE FIREBASE ---
+  // --- COINCIDENCIAS DE HORA POR VOZ ---
+  const mapeoHorasVoz = [
+    { claves: ["16", "cuatro", "16:15"], valor: "16:15-17:15" },
+    { claves: ["17", "cinco", "17:15"], valor: "17:15-18:15" },
+    { claves: ["19", "siete", "19:15"], valor: "19:15-20:15" },
+    { claves: ["20", "ocho", "20:15"], valor: "20:15-21:15" }
+  ];
+
   useEffect(() => {
     async function sincronizarConFirebase() {
       if (window.storage) {
@@ -78,7 +84,6 @@ export default function App() {
     sincronizarConFirebase();
   }, []);
 
-  // --- FUNCIÓN DE GUARDADO PERSISTENTE ---
   const guardarDatos = async (clave, nuevosDatos) => {
     localStorage.setItem(clave, JSON.stringify(nuevosDatos));
     if (window.storage) {
@@ -86,26 +91,92 @@ export default function App() {
     }
   };
 
-  // --- FUNCIÓN DE RECONOCIMIENTO DE VOZ NATIVO ---
+  // --- PROCESADOR INTELIGENTE DE AUDIO ---
+  const procesarComandoVoz = (frase) => {
+    const texto = frase.toLowerCase().trim();
+    setMensajeVozInfo(`Entendido: "${frase}"`);
+
+    // 1. Detectar e Intercambiar Profesor si se menciona
+    let profeEncontrado = profesorActivo;
+    for (const profe of profesores) {
+      if (texto.includes(profe.toLowerCase())) {
+        setProfesorActivo(profe);
+        profeEncontrado = profe;
+        break;
+      }
+    }
+
+    // 2. Detectar e Intercambiar Tramo Horario
+    let horaEncontrada = horaSeleccionada;
+    for (const mapeo of mapeoHorasVoz) {
+      if (mapeo.claves.some(clave => texto.includes(clave))) {
+        setHoraSeleccionada(mapeo.value);
+        horaEncontrada = mapeo.value;
+        break;
+      }
+    }
+
+    // 3. Buscar si coincide con el nombre de algún alumno asignado a este profesor
+    const listaAlumnosFiltrados = alumnos.filter(a => a.profesor === profeEncontrado);
+    let alumnoEncontrado = null;
+
+    for (const alumno of listaAlumnosFiltrados) {
+      if (texto.includes(alumno.nombre.toLowerCase())) {
+        alumnoEncontrado = alumno;
+        break;
+      }
+    }
+
+    // 4. Evaluar la acción si encontramos al alumno
+    if (alumnoEncontrado) {
+      let estadoVoz = null;
+      if (texto.includes("presente") || texto.includes("vino") || texto.includes("asiste") || texto.includes("está")) {
+        estadoVoz = "PRESENTE";
+      } else if (texto.includes("ausente") || texto.includes("falta") || texto.includes("no vino") || texto.includes("no está")) {
+        estadoVoz = "AUSENTE";
+      }
+
+      if (estadoVoz) {
+        const claveHistorial = `${fechaSeleccionada}_${horaEncontrada}_${alumnoEncontrado.id}`;
+        const nuevas = {
+          ...asistencias,
+          [claveHistorial]: {
+            estado: estadoVoz,
+            hora: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+          }
+        };
+        setAsistencias(nuevas);
+        guardarDatos('asistencias', nuevas);
+        setMensajeVozInfo(`✅ ${alumnoEncontrado.nombre} marcado como ${estadoVoz} (${horaEncontrada})`);
+        return;
+      }
+    }
+
+    // Fallback: Si no coincide con comandos de asistencia, lo escribe en el cuadro de texto para añadir nuevo alumno
+    const limpio = frase.replace(/\.$/, '');
+    setNuevoAlumnoNombre(limpio);
+  };
+
   const activarDictadoVoz = () => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     
     if (!SpeechRecognition) {
-      alert("Lo siento, tu navegador no soporta el reconocimiento de voz. Prueba con Google Chrome o Microsoft Edge.");
+      alert("Navegador no compatible con dictado de voz.");
       return;
     }
 
     const recognition = new SpeechRecognition();
-    recognition.lang = 'es-ES'; // Configurado en Español
+    recognition.lang = 'es-ES';
     recognition.interimResults = false;
     recognition.maxAlternatives = 1;
 
     recognition.onstart = () => {
       setEscuchandoVoces(true);
+      setMensajeVozInfo('Escuchando orden de voz...');
     };
 
-    recognition.onerror = (event) => {
-      console.error("Error en el reconocimiento de voz: ", event.error);
+    recognition.onerror = (e) => {
+      console.error(e.error);
       setEscuchandoVoces(false);
     };
 
@@ -114,16 +185,14 @@ export default function App() {
     };
 
     recognition.onresult = (event) => {
-      const textoEscuchado = event.results[0][0].transcript;
-      // Quitamos el punto final que suelen añadir los asistentes automáticos
-      const limpio = textoEscuchado.replace(/\.$/, '');
-      setNuevoAlumnoNombre(limpio);
+      const resultado = event.results[0][0].transcript;
+      procesarComandoVoz(resultado);
     };
 
     recognition.start();
   };
 
-  // --- ACCIONES DE GESTIÓN ---
+  // --- ACCIONES RESTANTES ---
   const agregarProfesor = () => {
     if (!nuevoProfeNombre.trim()) return;
     const nuevos = [...profesores, nuevoProfeNombre.trim()];
@@ -206,7 +275,6 @@ export default function App() {
 
   const alumnosFiltrados = alumnos.filter(a => a.profesor === profesorActivo);
 
-  // --- ESTILOS NATIVOS ---
   const tarjetaEstilo = { backgroundColor: '#1e293b', padding: '20px', borderRadius: '12px', border: '1px solid #334155' };
   const inputEstilo = { backgroundColor: '#0f172a', color: '#f8fafc', border: '1px solid #334155', padding: '10px', borderRadius: '8px', outline: 'none' };
   const botonNaranja = { backgroundColor: '#ff6b35', color: 'white', border: 'none', padding: '10px 15px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' };
@@ -217,8 +285,8 @@ export default function App() {
       {/* HEADER */}
       <div style={{ ...tarjetaEstilo, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '15px', marginBottom: '20px' }}>
         <div style={{ flex: 1 }}>
-          <h1 style={{ fontSize: '26px', fontWeight: 'bold', margin: '0 0 5px 0', trackingTight: 'tight' }}>ACADEMIA PIRINEOS</h1>
-          <p style={{ color: '#94a3b8', margin: 0, fontSize: '14px' }}>Control de Asistencia Profesional</p>
+          <h1 style={{ fontSize: '26px', fontWeight: 'bold', margin: '0 0 5px 0' }}>ACADEMIA PIRINEOS</h1>
+          <p style={{ color: '#94a3b8', margin: 0, fontSize: '14px' }}>Control de Asistencia Profesional por Voz</p>
         </div>
         <div>
           <button 
@@ -229,6 +297,13 @@ export default function App() {
           </button>
         </div>
       </div>
+
+      {/* FEEDBACK DE VOZ INTELIGENTE */}
+      {mensajeVozInfo && (
+        <div style={{ backgroundColor: '#1e293b', color: '#ff6b35', padding: '12px', borderRadius: '8px', marginBottom: '20px', border: '1px solid #ff6b35', fontSize: '14px', fontWeight: 'bold' }}>
+          {mensajeVozInfo}
+        </div>
+      )}
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '20px', alignItems: 'start' }}>
         
@@ -246,27 +321,15 @@ export default function App() {
                   padding: '12px 15px', 
                   backgroundColor: p === profesorActivo ? '#ff6b35' : '#0f172a', 
                   color: p === profesorActivo ? 'white' : '#94a3b8',
-                  borderRadius: '8px', 
-                  cursor: 'pointer',
-                  fontWeight: 'bold',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  border: '1px solid #334155'
+                  borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', display: 'flex', justifyContent: 'space-between', alignItems: 'center', border: '1px solid #334155'
                 }}
               >
                 <span>{p}</span>
                 {vistaAdmin && (
-                  <span 
-                    onClick={(e) => { e.stopPropagation(); eliminarProfesor(p); }} 
-                    style={{ color: '#ef4444', fontSize: '14px', cursor: 'pointer' }}
-                  >
-                    ✕
-                  </span>
+                  <span onClick={(e) => { e.stopPropagation(); eliminarProfesor(p); }} style={{ color: '#ef4444', cursor: 'pointer' }}>✕</span>
                 )}
               </div>
             ))}
-            {profesores.length === 0 && <p style={{ fontSize: '14px', color: '#94a3b8', textAlign: 'center', fontStyle: 'italic' }}>No hay profesores.</p>}
           </div>
         </div>
 
@@ -277,87 +340,39 @@ export default function App() {
             <div style={tarjetaEstilo}>
               <h3 style={{ fontSize: '18px', fontWeight: 'bold', marginBottom: '15px' }}>Añadir Nuevo Profesor</h3>
               <div style={{ display: 'flex', gap: '10px', marginBottom: '25px' }}>
-                <input 
-                  type="text" 
-                  placeholder="Nombre del profesor..." 
-                  value={nuevoProfeNombre}
-                  onChange={(e) => setNuevoProfeNombre(e.target.value)}
-                  style={{ ...inputEstilo, flex: 1 }}
-                />
+                <input type="text" placeholder="Nombre..." value={nuevoProfeNombre} onChange={(e) => setNuevoProfeNombre(e.target.value)} style={{ ...inputEstilo, flex: 1 }} />
                 <button onClick={agregarProfesor} style={botonNaranja}>+ Añadir</button>
               </div>
 
-              <h3 style={{ fontSize: '18px', fontWeight: 'bold', marginBottom: '10px', borderTop: '1px solid #334155', paddingTop: '20px' }}>
-                Importar Alumnos desde Excel
-              </h3>
-              <p style={{ color: '#94a3b8', fontSize: '14px', marginBottom: '15px' }}>
-                Sube tu archivo <strong>.xlsx</strong>. El sistema vinculará a los alumnos directamente a <strong>{profesorActivo || 'ningún profesor'}</strong>.
-              </p>
-              <input 
-                type="file" 
-                accept=".xlsx" 
-                onChange={importarExcel} 
-                disabled={!profesorActivo}
-                style={{ color: '#94a3b8', fontSize: '14px' }}
-              />
+              <h3 style={{ fontSize: '18px', fontWeight: 'bold', marginBottom: '10px', borderTop: '1px solid #334155', paddingTop: '20px' }}>Importar Alumnos</h3>
+              <input type="file" accept=".xlsx" onChange={importarExcel} disabled={!profesorActivo} style={{ color: '#94a3b8', fontSize: '14px' }} />
             </div>
           ) : (
             <div style={tarjetaEstilo}>
               
-              {/* FILTROS Y ALTAS CON MICRÓFONO */}
+              {/* ACCIONES */}
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '15px', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#0f172a', padding: '15px', borderRadius: '10px', marginBottom: '20px', border: '1px solid #334155' }}>
                 <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-                  <input 
-                    type="date" 
-                    value={fechaSeleccionada} 
-                    onChange={(e) => setFechaSeleccionada(e.target.value)} 
-                    style={{ ...inputEstilo, fontWeight: 'bold' }}
-                  />
-                  <select
-                    value={horaSeleccionada}
-                    onChange={(e) => setHoraSeleccionada(e.target.value)}
-                    style={{ ...inputEstilo, fontWeight: 'bold', borderColor: '#ff6b35' }}
-                  >
-                    {horariosAcademia.map(h => (
-                      <option key={h} value={h}>🕒 {h}</option>
-                    ))}
+                  <input type="date" value={fechaSeleccionada} onChange={(e) => setFechaSeleccionada(e.target.value)} style={{ ...inputEstilo, fontWeight: 'bold' }} />
+                  <select value={horaSeleccionada} onChange={(e) => setHoraSeleccionada(e.target.value)} style={{ ...inputEstilo, fontWeight: 'bold', borderColor: '#ff6b35' }}>
+                    {horariosAcademia.map(h => <option key={h} value={h}>🕒 {h}</option>)}
                   </select>
                 </div>
 
                 <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
-                  {/* BOTÓN DE MICRÓFONO INTEGRADO */}
                   <button
                     onClick={activarDictadoVoz}
-                    title="Dictar nombre por voz"
                     style={{
                       backgroundColor: escuchandoVoces ? '#ef4444' : '#1e293b',
-                      color: 'white',
-                      border: '1px solid #334155',
-                      padding: '10px 12px',
-                      borderRadius: '8px',
-                      cursor: 'pointer',
-                      fontSize: '16px',
-                      animation: escuchandoVoces ? 'pulse 1s infinite' : 'none'
+                      color: 'white', border: '1px solid #334155', padding: '10px 12px', borderRadius: '8px', cursor: 'pointer', fontSize: '16px'
                     }}
                   >
                     {escuchandoVoces ? '🛑...' : '🎙️'}
                   </button>
 
-                  <input 
-                    type="text" 
-                    placeholder={escuchandoVoces ? "Escuchando..." : "Nuevo alumno..."} 
-                    value={nuevoAlumnoNombre}
-                    onChange={(e) => setNuevoAlumnoNombre(e.target.value)}
-                    style={inputEstilo}
-                  />
-                  <select 
-                    value={nuevoAlumnoGrupo} 
-                    onChange={(e) => setNuevoAlumnoGrupo(e.target.value)}
-                    style={{ ...inputEstilo, fontWeight: 'bold' }}
-                  >
-                    {nivelesAcademia.map(nivel => (
-                      <option key={nivel} value={nivel}>{nivel}</option>
-                    ))}
+                  <input type="text" placeholder={escuchandoVoces ? "Hable ahora..." : "Nuevo alumno..."} value={nuevoAlumnoNombre} onChange={(e) => setNuevoAlumnoNombre(e.target.value)} style={inputEstilo} />
+                  <select value={nuevoAlumnoGrupo} onChange={(e) => setNuevoAlumnoGrupo(e.target.value)} style={{ ...inputEstilo, fontWeight: 'bold' }}>
+                    {nivelesAcademia.map(nivel => <option key={nivel} value={nivel}>{nivel}</option>)}
                   </select>
                   <button onClick={agregarAlumno} style={botonNaranja}>+</button>
                 </div>
@@ -382,32 +397,12 @@ export default function App() {
                         <tr key={a.id} style={{ borderBottom: '1px solid #334155' }}>
                           <td style={{ padding: '12px', fontWeight: 'bold' }}>{a.nombre}</td>
                           <td style={{ padding: '12px', textAlign: 'center' }}>
-                            <span style={{ backgroundColor: '#0f172a', color: '#ff6b35', padding: '3px 8px', borderRadius: '5px', fontSize: '12px', fontWeight: 'bold', border: '1px solid #ff6b35' }}>
-                              {a.grupo}
-                            </span>
+                            <span style={{ backgroundColor: '#0f172a', color: '#ff6b35', padding: '3px 8px', borderRadius: '5px', fontSize: '12px', fontWeight: 'bold', border: '1px solid #ff6b35' }}>{a.grupo}</span>
                           </td>
                           <td style={{ padding: '12px' }}>
                             <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
-                              <button 
-                                onClick={() => marcarAsistencia(a.id, 'PRESENTE')}
-                                style={{
-                                  backgroundColor: historial?.estado === 'PRESENTE' ? '#16a34a' : '#0f172a',
-                                  color: historial?.estado === 'PRESENTE' ? 'white' : '#4ade80',
-                                  border: '1px solid #16a34a', padding: '6px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer'
-                                }}
-                              >
-                                ✓ PRESENTE
-                              </button>
-                              <button 
-                                onClick={() => marcarAsistencia(a.id, 'AUSENTE')}
-                                style={{
-                                  backgroundColor: historial?.estado === 'AUSENTE' ? '#dc2626' : '#0f172a',
-                                  color: historial?.estado === 'AUSENTE' ? 'white' : '#f87171',
-                                  border: '1px solid #dc2626', padding: '6px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer'
-                                }}
-                              >
-                                ✕ AUSENTE
-                              </button>
+                              <button onClick={() => marcarAsistencia(a.id, 'PRESENTE')} style={{ backgroundColor: historial?.estado === 'PRESENTE' ? '#16a34a' : '#0f172a', color: historial?.estado === 'PRESENTE' ? 'white' : '#4ade80', border: '1px solid #16a34a', padding: '6px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }}>✓ PRESENTE</button>
+                              <button onClick={() => marcarAsistencia(a.id, 'AUSENTE')} style={{ backgroundColor: historial?.estado === 'AUSENTE' ? '#dc2626' : '#0f172a', color: historial?.estado === 'AUSENTE' ? 'white' : '#f87171', border: '1px solid #dc2626', padding: '6px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }}>✕ AUSENTE</button>
                             </div>
                           </td>
                           <td style={{ padding: '12px', textAlign: 'center', fontSize: '13px' }}>
@@ -424,13 +419,6 @@ export default function App() {
                         </tr>
                       );
                     })}
-                    {alumnosFiltrados.length === 0 && (
-                      <tr>
-                        <td colSpan="5" style={{ padding: '30px', color: '#94a3b8', textAlign: 'center', fontStyle: 'italic' }}>
-                          No hay alumnos registrados con este profesor.
-                        </td>
-                      </tr>
-                    )}
                   </tbody>
                 </table>
               </div>
