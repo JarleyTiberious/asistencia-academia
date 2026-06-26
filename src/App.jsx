@@ -36,12 +36,15 @@ export default function App() {
   const [nuevoProfeNombre, setNuevoProfeNombre] = useState('');
   const [nuevoAlumnoNombre, setNuevoAlumnoNombre] = useState('');
   const [nuevoAlumnoGrupo, setNuevoAlumnoGrupo] = useState('B2');
+
+  // --- ESTADOS NUEVOS PARA EL CUADRANTE MENSUAL ---
+  const [mesCuadrante, setMesCuadrante] = useState(new Date().getMonth() + 1); // 1 - 12
+  const [anioCuadrante, setAnioCuadrante] = useState(new Date().getFullYear());
   
-  // --- FUNCIÓN PARA DETECTAR EL DÍA DEL CALENDARIO ---
   const obtenerDiaSemanaClave = (fechaStr) => {
     const partes = fechaStr.split('-');
     const fecha = new Date(partes[0], partes[1] - 1, partes[2]);
-    const numeroDia = fecha.getDay(); // 1=L, 2=M, 3=X, 4=J, 5=V
+    const numeroDia = fecha.getDay(); 
     
     if (numeroDia === 1 || numeroDia === 3) return "L-X"; 
     if (numeroDia === 2 || numeroDia === 4) return "M-J"; 
@@ -49,7 +52,6 @@ export default function App() {
     return "L-X"; 
   };
 
-  // Estado para el formulario de alta y estado para el FILTRO VISUAL de la tabla
   const [nuevoAlumnoDias, setNuevoAlumnoDias] = useState(() => obtenerDiaSemanaClave(new Date().toISOString().split('T')[0])); 
   const [diaFiltroTabla, setDiaFiltroTabla] = useState(() => obtenerDiaSemanaClave(new Date().toISOString().split('T')[0]));
 
@@ -72,7 +74,14 @@ export default function App() {
     { clave: "L-M-X-J-V", texto: "Lunes a Viernes" }
   ];
 
-  // --- ESCUDO DE PROTECCIÓN DE DATOS DE LOCALSTORAGE ---
+  const mesesAnio = [
+    { valor: 1, nombre: "Enero" }, { valor: 2, nombre: "Febrero" }, { valor: 3, nombre: "Marzo" },
+    { valor: 4, nombre: "Abril" }, { valor: 5, nombre: "Mayo" }, { valor: 6, nombre: "Junio" },
+    { valor: 7, nombre: "Julio" }, { valor: 8, nombre: "Agosto" }, { valor: 9, nombre: "Septiembre" },
+    { valor: 10, nombre: "Octubre" }, { valor: 11, nombre: "Noviembre" }, { valor: 12, nombre: "Diciembre" }
+  ];
+
+  // --- ESCUDO DE PROTECCIÓN DE DATOS ---
   useEffect(() => {
     async function sincronizarConFirebase() {
       if (window.storage) {
@@ -94,18 +103,21 @@ export default function App() {
             localStorage.setItem('asistencias', JSON.stringify(datosAsistencias));
           }
         } catch (error) {
-          console.error("Firebase offline. Datos locales protegidos.", error);
+          console.error("Firebase offline. Protegiendo LocalStorage.", error);
         }
       }
     }
     sincronizarConFirebase();
   }, []);
 
-  // Al cambiar la fecha del calendario, sincronizamos tanto el formulario como el filtro de la vista
   useEffect(() => {
     const diaDetectado = obtenerDiaSemanaClave(fechaSeleccionada);
     setNuevoAlumnoDias(diaDetectado);
     setDiaFiltroTabla(diaDetectado);
+    
+    const partes = fechaSeleccionada.split('-');
+    setAnioCuadrante(parseInt(partes[0]));
+    setMesCuadrante(parseInt(partes[1]));
   }, [fechaSeleccionada]);
 
   const guardarDatos = async (clave, nuevosDatos) => {
@@ -146,8 +158,6 @@ export default function App() {
     const nuevos = [...alumnos, nuevo];
     setAlumnos(nuevos);
     guardarDatos('alumnos', nuevos);
-    
-    // Forzamos a la tabla a mirar el bloque de días del alumno recién creado para asegurar que lo ves aparecer
     setDiaFiltroTabla(nuevoAlumnoDias);
     setNuevoAlumnoNombre('');
   };
@@ -219,12 +229,20 @@ export default function App() {
     reader.readAsBinaryString(file);
   };
 
-  // --- FILTRADO TRIPLE AVANZADO CORREGIDO ---
+  // --- LÓGICA DE DÍAS DEL MES DINÁMICO ---
+  // El truco en JS: el día 0 del mes siguiente nos devuelve el último día del mes actual (28, 29, 30 o 31)
+  const totalDiasMes = new Date(anioCuadrante, mesCuadrante, 0).getDate();
+  const arregloDias = Array.from({ length: totalDiasMes }, (_, i) => i + 1);
+
+  // Alumnos filtrados para pasar lista diaria
   const alumnosFiltrados = alumnos.filter(a => 
     a.profesor === profesorActivo && 
     a.horario === horaSeleccionada &&
     (a.dias === diaFiltroTabla || a.dias === 'L-M-X-J-V')
   );
+
+  // Todos los alumnos del profesor activo para la vista mensual general
+  const alumnosDelProfesor = alumnos.filter(a => a.profesor === profesorActivo);
   
   const tarjetaEstilo = { backgroundColor: '#1e293b', padding: '20px', borderRadius: '12px', border: '1px solid #334155' };
   const inputEstilo = { backgroundColor: '#0f172a', color: '#f8fafc', border: '1px solid #334155', padding: '10px', borderRadius: '8px', outline: 'none' };
@@ -278,137 +296,168 @@ export default function App() {
               <input type="file" accept=".xlsx" onChange={importarExcel} disabled={!profesorActivo} style={{ color: '#94a3b8', fontSize: '14px' }} />
             </div>
           ) : (
-            <div style={tarjetaEstilo}>
-              {/* FILTROS Y ALTA */}
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '15px', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#0f172a', padding: '15px', borderRadius: '10px', marginBottom: '20px', border: '1px solid #334155' }}>
-                <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-                  <input type="date" value={fechaSeleccionada} onChange={(e) => setFechaSeleccionada(e.target.value)} style={{ ...inputEstilo, fontWeight: 'bold' }} />
-                  <select value={horaSeleccionada} onChange={(e) => setHoraSeleccionada(e.target.value)} style={{ ...inputEstilo, fontWeight: 'bold', borderColor: '#ff6b35' }}>
-                    {horariosAcademia.map(h => <option key={h} value={h}>🕒 {h}</option>)}
-                  </select>
+            <>
+              {/* PANEL DIARIO */}
+              <div style={tarjetaEstilo}>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '15px', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#0f172a', padding: '15px', borderRadius: '10px', marginBottom: '20px', border: '1px solid #334155' }}>
+                  <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                    <input type="date" value={fechaSeleccionada} onChange={(e) => setFechaSeleccionada(e.target.value)} style={{ ...inputEstilo, fontWeight: 'bold' }} />
+                    <select value={horaSeleccionada} onChange={(e) => setHoraSeleccionada(e.target.value)} style={{ ...inputEstilo, fontWeight: 'bold', borderColor: '#ff6b35' }}>
+                      {horariosAcademia.map(h => <option key={h} value={h}>🕒 {h}</option>)}
+                    </select>
+                  </div>
+                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+                    <input type="text" placeholder="Nuevo alumno..." value={nuevoAlumnoNombre} onChange={(e) => setNuevoAlumnoNombre(e.target.value)} style={inputEstilo} />
+                    
+                    <select value={nuevoAlumnoGrupo} onChange={(e) => setNuevoAlumnoGrupo(e.target.value)} style={{ ...inputEstilo, fontWeight: 'bold' }}>
+                      {nivelesAcademia.map(nivel => <option key={nivel} value={nivel}>{nivel}</option>)}
+                    </select>
+
+                    <select value={nuevoAlumnoDias} onChange={(e) => setNuevoAlumnoDias(e.target.value)} style={{ ...inputEstilo, fontWeight: 'bold', borderColor: '#10b981' }}>
+                      {opcionesDias.map(opt => <option key={opt.clave} value={opt.clave}>{opt.texto}</option>)}
+                    </select>
+
+                    <button onClick={agregarAlumno} style={botonNaranja}>+</button>
+                  </div>
                 </div>
-                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
-                  <input type="text" placeholder="Nuevo alumno..." value={nuevoAlumnoNombre} onChange={(e) => setNuevoAlumnoNombre(e.target.value)} style={inputEstilo} />
-                  
-                  <select value={nuevoAlumnoGrupo} onChange={(e) => setNuevoAlumnoGrupo(e.target.value)} style={{ ...inputEstilo, fontWeight: 'bold' }}>
-                    {nivelesAcademia.map(nivel => <option key={nivel} value={nivel}>{nivel}</option>)}
-                  </select>
 
-                  <select value={nuevoAlumnoDias} onChange={(e) => setNuevoAlumnoDias(e.target.value)} style={{ ...inputEstilo, fontWeight: 'bold', borderColor: '#10b981' }}>
-                    {opcionesDias.map(opt => <option key={opt.clave} value={opt.clave}>{opt.texto}</option>)}
-                  </select>
-
-                  <button onClick={agregarAlumno} style={botonNaranja}>+</button>
+                {/* FILTROS DÍAS LECTIVOS */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '15px', padding: '10px 15px', backgroundColor: '#0f172a', borderRadius: '8px', border: '1px solid #334155' }}>
+                  <span style={{ fontSize: '13px', color: '#94a3b8', fontWeight: 'bold' }}>👁️ Pasar lista de:</span>
+                  <div style={{ display: 'flex', gap: '6px' }}>
+                    {opcionesDias.map(opt => (
+                      <button key={opt.clave} onClick={() => setDiaFiltroTabla(opt.clave)} style={{ backgroundColor: diaFiltroTabla === opt.clave ? '#10b981' : '#1e293b', color: 'white', border: '1px solid #334155', padding: '6px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }}>{opt.clave}</button>
+                    ))}
+                  </div>
                 </div>
-              </div>
 
-              {/* BARRA DE FILTRO DE VISTA DE DÍAS LECTIVOS */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '15px', padding: '10px 15px', backgroundColor: '#1e293b', borderRadius: '8px', border: '1px solid #334155' }}>
-                <span style={{ fontSize: '13px', color: '#94a3b8', fontWeight: 'bold' }}>👁️ Viendo alumnos de:</span>
-                <div style={{ display: 'flex', gap: '6px' }}>
-                  {opcionesDias.map(opt => (
-                    <button
-                      key={opt.clave}
-                      onClick={() => setDiaFiltroTabla(opt.clave)}
-                      style={{
-                        backgroundColor: diaFiltroTabla === opt.clave ? '#10b981' : '#0f172a',
-                        color: 'white',
-                        border: '1px solid #334155',
-                        padding: '6px 12px',
-                        borderRadius: '6px',
-                        fontSize: '12px',
-                        fontWeight: 'bold',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      {opt.clave}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* TABLA DE ASISTENCIA */}
-              <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-                  <thead>
-                    <tr style={{ borderBottom: '2px solid #334155', color: '#94a3b8', fontSize: '13px' }}>
-                      <th style={{ padding: '12px' }}>Alumno</th>
-                      <th style={{ padding: '12px', textAlign: 'center' }}>Nivel</th>
-                      <th style={{ padding: '12px', textAlign: 'center' }}>Horario</th>
-                      <th style={{ padding: '12px', textAlign: 'center' }}>Días (Editable)</th>
-                      <th style={{ padding: '12px', textAlign: 'center' }}>Acciones</th>
-                      <th style={{ padding: '12px', textAlign: 'center' }}>Estado</th>
-                      <th style={{ padding: '12px', textAlign: 'center' }}></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {alumnosFiltrados.map(a => {
-                      const historial = asistencias[`${fechaSeleccionada}_${horaSeleccionada}_${a.id}`];
-                      return (
-                        <tr key={a.id} style={{ borderBottom: '1px solid #334155' }}>
-                          <td style={{ padding: '12px', fontWeight: 'bold' }}>{a.nombre}</td>
-                          
-                          <td style={{ padding: '12px', textAlign: 'center' }}>
-                            <select
-                              value={a.grupo}
-                              onChange={(e) => cambiarNivelAlumno(a.id, e.target.value)}
-                              style={{ backgroundColor: '#0f172a', color: '#ff6b35', padding: '4px 8px', borderRadius: '6px', fontSize: '12px', fontWeight: 'bold', border: '1px solid #ff6b35', outline: 'none', cursor: 'pointer' }}
-                            >
-                              {nivelesAcademia.map(nivel => <option key={nivel} value={nivel}>{nivel}</option>)}
-                            </select>
-                          </td>
-
-                          <td style={{ padding: '12px', textAlign: 'center' }}>
-                            <select
-                              value={a.horario}
-                              onChange={(e) => cambiarHorarioAlumno(a.id, e.target.value)}
-                              style={{ backgroundColor: '#0f172a', color: '#38bdf8', padding: '4px 8px', borderRadius: '6px', fontSize: '12px', fontWeight: 'bold', border: '1px solid #38bdf8', outline: 'none', cursor: 'pointer' }}
-                            >
-                              {horariosAcademia.map(h => <option key={h} value={h}>🕒 {h}</option>)}
-                            </select>
-                          </td>
-
-                          <td style={{ padding: '12px', textAlign: 'center' }}>
-                            <select
-                              value={a.dias || 'L-X'}
-                              onChange={(e) => cambiarDiasAlumno(a.id, e.target.value)}
-                              style={{ backgroundColor: '#0f172a', color: '#10b981', padding: '4px 8px', borderRadius: '6px', fontSize: '12px', fontWeight: 'bold', border: '1px solid #10b981', outline: 'none', cursor: 'pointer' }}
-                            >
-                              {opcionesDias.map(opt => <option key={opt.clave} value={opt.clave}>{opt.clave}</option>)}
-                            </select>
-                          </td>
-
-                          <td style={{ padding: '12px' }}>
-                            <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
-                              <button onClick={() => marcarAsistencia(a.id, 'PRESENTE')} style={{ backgroundColor: historial?.estado === 'PRESENTE' ? '#16a34a' : '#0f172a', color: historial?.estado === 'PRESENTE' ? 'white' : '#4ade80', border: '1px solid #16a34a', padding: '6px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }}>✓ PRESENTE</button>
-                              <button onClick={() => marcarAsistencia(a.id, 'AUSENTE')} style={{ backgroundColor: historial?.estado === 'AUSENTE' ? '#dc2626' : '#0f172a', color: historial?.estado === 'AUSENTE' ? 'white' : '#f87171', border: '1px solid #dc2626', padding: '6px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }}>✕ AUSENTE</button>
-                            </div>
-                          </td>
-                          <td style={{ padding: '12px', textAlign: 'center', fontSize: '13px' }}>
-                            {historial ? (
-                              <div>
-                                <span style={{ fontWeight: 'bold', color: historial.estado === 'PRESENTE' ? '#4ade80' : '#f87171' }}>{historial.estado}</span>
-                                <div style={{ fontSize: '10px', color: '#94a3b8', marginTop: '2px' }}>⏱ {historial.hora}</div>
+                {/* TABLA ASISTENCIA DIARIA */}
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                    <thead>
+                      <tr style={{ borderBottom: '2px solid #334155', color: '#94a3b8', fontSize: '13px' }}>
+                        <th style={{ padding: '12px' }}>Alumno</th>
+                        <th style={{ padding: '12px', textAlign: 'center' }}>Nivel</th>
+                        <th style={{ padding: '12px', textAlign: 'center' }}>Horario</th>
+                        <th style={{ padding: '12px', textAlign: 'center' }}>Días</th>
+                        <th style={{ padding: '12px', textAlign: 'center' }}>Acciones</th>
+                        <th style={{ padding: '12px', textAlign: 'center' }}>Estado</th>
+                        <th style={{ padding: '12px', textAlign: 'center' }}></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {alumnosFiltrados.map(a => {
+                        const historial = asistencias[`${fechaSeleccionada}_${horaSeleccionada}_${a.id}`];
+                        return (
+                          <tr key={a.id} style={{ borderBottom: '1px solid #334155' }}>
+                            <td style={{ padding: '12px', fontWeight: 'bold' }}>{a.nombre}</td>
+                            <td style={{ padding: '12px', textAlign: 'center' }}>{a.grupo}</td>
+                            <td style={{ padding: '12px', textAlign: 'center' }}>{a.horario}</td>
+                            <td style={{ padding: '12px', textAlign: 'center' }}>{a.dias}</td>
+                            <td style={{ padding: '12px' }}>
+                              <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
+                                <button onClick={() => marcarAsistencia(a.id, 'PRESENTE')} style={{ backgroundColor: historial?.estado === 'PRESENTE' ? '#16a34a' : '#0f172a', color: historial?.estado === 'PRESENTE' ? 'white' : '#4ade80', border: '1px solid #16a34a', padding: '6px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }}>✓ PRESENTE</button>
+                                <button onClick={() => marcarAsistencia(a.id, 'AUSENTE')} style={{ backgroundColor: historial?.estado === 'AUSENTE' ? '#dc2626' : '#0f172a', color: historial?.estado === 'AUSENTE' ? 'white' : '#f87171', border: '1px solid #dc2626', padding: '6px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }}>✕ AUSENTE</button>
                               </div>
-                            ) : <span style={{ color: '#475569', fontStyle: 'italic' }}>Sin registro</span>}
+                            </td>
+                            <td style={{ padding: '12px', textAlign: 'center', fontSize: '13px' }}>
+                              {historial ? (
+                                <span style={{ fontWeight: 'bold', color: historial.estado === 'PRESENTE' ? '#4ade80' : '#f87171' }}>{historial.estado}</span>
+                              ) : <span style={{ color: '#475569', fontStyle: 'italic' }}>-</span>}
+                            </td>
+                            <td style={{ padding: '12px', textAlign: 'center' }}>
+                              <span onClick={() => eliminarAlumno(a.id)} style={{ color: '#475569', cursor: 'pointer' }}>🗑</span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* BRAND NEW: VISUALIZADOR MENSUAL DINÁMICO */}
+              <div style={tarjetaEstilo}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #334155', paddingBottom: '15px', marginBottom: '15px', flexWrap: 'wrap', gap: '10px' }}>
+                  <div>
+                    <h2 style={{ fontSize: '18px', fontWeight: 'bold', margin: 0 }}>📅 Cuadrante de Asistencia Mensual</h2>
+                    <p style={{ color: '#94a3b8', fontSize: '12px', margin: '4px 0 0 0' }}>Resumen del estado total del mes de manera compacta</p>
+                  </div>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <select value={mesCuadrante} onChange={(e) => setMesCuadrante(parseInt(e.target.value))} style={inputEstilo}>
+                      {mesesAnio.map(m => <option key={m.valor} value={m.valor}>{m.nombre}</option>)}
+                    </select>
+                    <select value={anioCuadrante} onChange={(e) => setAnioCuadrante(parseInt(e.target.value))} style={inputEstilo}>
+                      {[2025, 2026, 2027, 2028].map(a => <option key={a} value={a}>{a}</option>)}
+                    </select>
+                  </div>
+                </div>
+
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+                    <thead>
+                      <tr style={{ backgroundColor: '#0f172a', color: '#94a3b8' }}>
+                        <th style={{ padding: '10px', textAlign: 'left', minWidth: '160px', border: '1px solid #334155' }}>Alumno</th>
+                        <th style={{ padding: '10px', textAlign: 'center', border: '1px solid #334155' }}>Clase</th>
+                        {arregloDias.map(dia => (
+                          <th key={dia} style={{ padding: '5px 2px', textAlign: 'center', minWidth: '24px', border: '1px solid #334155', backgroundColor: '#1e293b' }}>
+                            {dia}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {alumnosDelProfesor.map(alumno => (
+                        <tr key={alumno.id} style={{ borderBottom: '1px solid #334155' }}>
+                          <td style={{ padding: '8px 10px', fontWeight: 'bold', border: '1px solid #334155' }}>{alumno.nombre}</td>
+                          <td style={{ padding: '8px 4px', textClassName: 'center', color: '#ff6b35', fontSize: '10px', textAlign: 'center', border: '1px solid #334155' }}>
+                            {alumno.dias} <br/> <span style={{ color: '#38bdf8' }}>{alumno.horario.split('-')[0]}</span>
                           </td>
-                          <td style={{ padding: '12px', textAlign: 'center' }}>
-                            <span onClick={() => eliminarAlumno(a.id)} style={{ color: '#475569', cursor: 'pointer' }}>🗑</span>
+                          {arregloDias.map(dia => {
+                            // Construimos la fecha exacta de la celda de forma limpia con formato YYYY-MM-DD
+                            const mmStr = mesCuadrante < 10 ? `0${mesCuadrante}` : mesCuadrante;
+                            const ddStr = dia < 10 ? `0${dia}` : dia;
+                            const fechaCelda = `${anioCuadrante}-${mmStr}-${ddStr}`;
+                            
+                            // Buscamos si existe registro en el histórico para ese día
+                            const registro = asistencias[`${fechaCelda}_${alumno.horario}_${alumno.id}`];
+                            
+                            let renderEstado = "-";
+                            let colorCelda = 'transparent';
+                            if (registro?.estado === 'PRESENTE') { renderEstado = "🟢"; }
+                            if (registro?.estado === 'AUSENTE') { renderEstado = "🔴"; }
+
+                            return (
+                              <td 
+                                key={dia} 
+                                style={{ textAlign: 'center', padding: '4px 0', border: '1px solid #334155', fontSize: '11px' }}
+                                title={`${alumno.nombre} - ${fechaCelda}`}
+                              >
+                                {renderEstado}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))}
+                      {alumnosDelProfesor.length === 0 && (
+                        <tr>
+                          <td colSpan={totalDiasMes + 2} style={{ padding: '20px', textClassName: 'center', color: '#94a3b8', fontStyle: 'italic', textAlign: 'center' }}>
+                            No hay alumnos registrados en la lista de este profesor para mostrar el historial del mes.
                           </td>
                         </tr>
-                      );
-                    })}
-                    {alumnosFiltrados.length === 0 && (
-                      <tr>
-                        <td colSpan="7" style={{ padding: '30px', color: '#94a3b8', textAlign: 'center', fontStyle: 'italic' }}>
-                          No hay alumnos asignados en este horario para el grupo de días "{diaFiltroTabla}".
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+                
+                {/* LEYENDA */}
+                <div style={{ display: 'flex', gap: '15px', marginTop: '15px', fontSize: '12px', color: '#94a3b8' }}>
+                  <span>🟢 = Presente</span>
+                  <span>🔴 = Ausente</span>
+                  <span>- = Sin registro / No lectivo</span>
+                </div>
               </div>
-            </div>
+            </>
           )}
         </div>
 
