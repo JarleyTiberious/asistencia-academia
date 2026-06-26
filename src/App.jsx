@@ -2,24 +2,41 @@ import React, { useState, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 
 export default function App() {
-  // --- ESTADOS DE LA APLICACIÓN ---
-  const [profesores, setProfesores] = useState([]);
-  const [profesorActivo, setProfesorActivo] = useState(null);
-  const [alumnos, setAlumnos] = useState([]);
-  const [asistencias, setAsistencias] = useState({});
+  // --- ARRANCAR ESTADOS DIRECTAMENTE DESDE LOCALSTORAGE (INMUNE A F5) ---
+  const [profesores, setProfesores] = useState(() => {
+    const locales = localStorage.getItem('profesores');
+    return locales ? JSON.parse(locales) : [];
+  });
+
+  const [profesorActivo, setProfesorActivo] = useState(() => {
+    const locales = localStorage.getItem('profesores');
+    if (locales) {
+      const parsed = JSON.parse(locales);
+      return parsed.length > 0 ? parsed[0] : null;
+    }
+    return null;
+  });
+
+  const [alumnos, setAlumnos] = useState(() => {
+    const locales = localStorage.getItem('alumnos');
+    return locales ? JSON.parse(locales) : [];
+  });
+
+  const [asistencias, setAsistencias] = useState(() => {
+    const locales = localStorage.getItem('asistencias');
+    return locales ? JSON.parse(locales) : {};
+  });
+
   const [fechaSeleccionada, setFechaSeleccionada] = useState(
     new Date().toISOString().split('T')[0]
   );
   
-  // Nuevo estado para controlar los tramos horarios de la academia
   const [horaSeleccionada, setHoraSeleccionada] = useState('16:15-17:15');
-  
   const [vistaAdmin, setVistaAdmin] = useState(false);
   const [nuevoProfeNombre, setNuevoProfeNombre] = useState('');
   const [nuevoAlumnoNombre, setNuevoAlumnoNombre] = useState('');
   const [nuevoAlumnoGrupo, setNuevoAlumnoGrupo] = useState('B2');
 
-  // --- CONFIGURACIÓN DE LA ACADEMIA ---
   const nivelesAcademia = [
     "Primaria", "ESO", "Bachillerato", "PAU", 
     "Mayores 25", "Acceso Grado", "B1", "B2", "C1", "APTIS"
@@ -32,29 +49,41 @@ export default function App() {
     "20:15-21:15"
   ];
 
-  // --- CARGA DESDE FIREBASE ---
+  // --- SCONCRÉCION Y CARGA EN SEGUNDO PLANO DE FIREBASE ---
   useEffect(() => {
-    async function cargarDatos() {
+    async function sincronizarConFirebase() {
       if (window.storage) {
         const datosProfes = await window.storage.get('profesores');
         const datosAlumnos = await window.storage.get('alumnos');
         const datosAsistencias = await window.storage.get('asistencias');
 
-        if (datosProfes) setProfesores(datosProfes);
-        if (datosAlumnos) setAlumnos(datosAlumnos);
-        if (datosAsistencias) setAsistencias(datosAsistencias);
-        
+        // Si Firebase tiene datos más recientes, actualizamos la interfaz y el local
         if (datosProfes && datosProfes.length > 0) {
-          setProfesorActivo(datosProfes[0]);
+          setProfesores(datosProfes);
+          localStorage.setItem('profesores', JSON.stringify(datosProfes));
+          if (!profesorActivo) setProfesorActivo(datosProfes[0]);
+        }
+        if (datosAlumnos && datosAlumnos.length > 0) {
+          setAlumnos(datosAlumnos);
+          localStorage.setItem('alumnos', JSON.stringify(datosAlumnos));
+        }
+        if (datosAsistencias) {
+          setAsistencias(datosAsistencias);
+          localStorage.setItem('asistencias', JSON.stringify(datosAsistencias));
         }
       }
     }
-    cargarDatos();
+    sincronizarConFirebase();
   }, []);
 
-  const guardarEnFirebase = async (clave, datos) => {
+  // --- FUNCIÓN DE GUARDADO DUO-SEGURO ---
+  const guardarDatos = async (clave, nuevosDatos) => {
+    // 1. Guardado inmediato en el navegador del usuario (F5 no lo rompe)
+    localStorage.setItem(clave, JSON.stringify(nuevosDatos));
+
+    // 2. Guardado persistente en la nube de Firebase
     if (window.storage) {
-      await window.storage.set(clave, datos);
+      await window.storage.set(clave, nuevosDatos);
     }
   };
 
@@ -63,7 +92,7 @@ export default function App() {
     if (!nuevoProfeNombre.trim()) return;
     const nuevos = [...profesores, nuevoProfeNombre.trim()];
     setProfesores(nuevos);
-    guardarEnFirebase('profesores', nuevos);
+    guardarDatos('profesores', nuevos);
     if (!profesorActivo) setProfesorActivo(nuevoProfeNombre.trim());
     setNuevoProfeNombre('');
   };
@@ -71,7 +100,7 @@ export default function App() {
   const eliminarProfesor = (profe) => {
     const nuevos = profesores.filter(p => p !== profe);
     setProfesores(nuevos);
-    guardarEnFirebase('profesores', nuevos);
+    guardarDatos('profesores', nuevos);
     if (profesorActivo === profe) setProfesorActivo(nuevos[0] || null);
   };
 
@@ -85,18 +114,17 @@ export default function App() {
     };
     const nuevos = [...alumnos, nuevo];
     setAlumnos(nuevos);
-    guardarEnFirebase('alumnos', nuevos);
+    guardarDatos('alumnos', nuevos);
     setNuevoAlumnoNombre('');
   };
 
   const eliminarAlumno = (id) => {
     const nuevos = alumnos.filter(a => a.id !== id);
     setAlumnos(nuevos);
-    guardarEnFirebase('alumnos', nuevos);
+    guardarDatos('alumnos', nuevos);
   };
 
   const marcarAsistencia = (alumnoId, estado) => {
-    // La clave ahora incluye la fecha Y el tramo horario específico
     const claveHistorial = `${fechaSeleccionada}_${horaSeleccionada}_${alumnoId}`;
     const nuevas = {
       ...asistencias,
@@ -106,10 +134,9 @@ export default function App() {
       }
     };
     setAsistencias(nuevas);
-    guardarEnFirebase('asistencias', nuevas);
+    guardarDatos('asistencias', nuevas);
   };
 
-  // --- IMPORTADOR DE EXCEL ---
   const importarExcel = (e) => {
     const file = e.target.files[0];
     if (!file || !profesorActivo) return;
@@ -136,7 +163,7 @@ export default function App() {
 
       const listaActualizada = [...alumnos, ...nuevosAlumnos];
       setAlumnos(listaActualizada);
-      guardarEnFirebase('alumnos', listaActualizada);
+      guardarDatos('alumnos', listaActualizada);
     };
     reader.readAsBinaryString(file);
   };
@@ -169,7 +196,7 @@ export default function App() {
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '20px', alignItems: 'start' }}>
         
-        {/* SIDEBAR: PROFESORES */}
+        {/* SIDEBAR */}
         <div style={tarjetaEstilo}>
           <h2 style={{ fontSize: '14px', fontWeight: 'bold', color: '#94a3b8', textTransform: 'uppercase', marginBottom: '15px', letterSpacing: '1px' }}>
             Profesores Activos
@@ -211,7 +238,6 @@ export default function App() {
         <div style={{ gridColumn: 'span 2', display: 'flex', flexDirection: 'column', gap: '20px' }}>
           
           {vistaAdmin ? (
-            /* PANALES DE CONFIGURACIÓN */
             <div style={tarjetaEstilo}>
               <h3 style={{ fontSize: '18px', fontWeight: 'bold', marginBottom: '15px' }}>Añadir Nuevo Profesor</h3>
               <div style={{ display: 'flex', gap: '10px', marginBottom: '25px' }}>
@@ -240,10 +266,9 @@ export default function App() {
               />
             </div>
           ) : (
-            /* CONTROL DE ASISTENCIA CON FILTRO DE HORA */
             <div style={tarjetaEstilo}>
               
-              {/* SELECTORES DE FECHA, HORA Y ALTA DIRECTA */}
+              {/* FILTROS */}
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '15px', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#0f172a', padding: '15px', borderRadius: '10px', marginBottom: '20px', border: '1px solid #334155' }}>
                 <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
                   <input 
@@ -252,7 +277,6 @@ export default function App() {
                     onChange={(e) => setFechaSeleccionada(e.target.value)} 
                     style={{ ...inputEstilo, fontWeight: 'bold' }}
                   />
-                  {/* Selector de horas requerido */}
                   <select
                     value={horaSeleccionada}
                     onChange={(e) => setHoraSeleccionada(e.target.value)}
@@ -285,7 +309,7 @@ export default function App() {
                 </div>
               </div>
 
-              {/* TABLA DE ASISTENCIA */}
+              {/* TABLA */}
               <div style={{ overflowX: 'auto' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
                   <thead>
@@ -299,7 +323,6 @@ export default function App() {
                   </thead>
                   <tbody>
                     {alumnosFiltrados.map(a => {
-                      // Se recupera la asistencia cruzando fecha e intervalo de hora
                       const historial = asistencias[`${fechaSeleccionada}_${horaSeleccionada}_${a.id}`];
                       return (
                         <tr key={a.id} style={{ borderBottom: '1px solid #334155' }}>
