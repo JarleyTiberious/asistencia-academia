@@ -229,21 +229,76 @@ export default function App() {
     reader.readAsBinaryString(file);
   };
 
+  // --- FUNCIÓN PARA EXPORTAR EL CUADRANTE A EXCEL ---
+  const exportarExcelMensual = () => {
+    if (!profesorActivo || alumnosDelProfesor.length === 0) {
+      alert("No hay alumnos para exportar.");
+      return;
+    }
+
+    // 1. Preparamos las cabeceras del Excel
+    const cabeceras = ["Alumno", "Nivel", "Horario", "Días", ...arregloDias];
+    
+    // 2. Rellenamos las filas con los datos y las asistencias
+    const filas = alumnosDelProfesor.map(alumno => {
+      const filaAlumno = [
+        alumno.nombre, 
+        alumno.grupo, 
+        alumno.horario || '', 
+        alumno.dias || ''
+      ];
+
+      arregloDias.forEach(dia => {
+        const mmStr = mesCuadrante < 10 ? `0${mesCuadrante}` : mesCuadrante;
+        const ddStr = dia < 10 ? `0${dia}` : dia;
+        const fechaCelda = `${anioCuadrante}-${mmStr}-${ddStr}`;
+        
+        let registroEncontrado = null;
+        for (const horaPosible of horariosAcademia) {
+          const claveBuscada = `${fechaCelda}_${horaPosible}_${alumno.id}`;
+          if (asistencias[claveBuscada]) {
+            registroEncontrado = asistencias[claveBuscada];
+            break;
+          }
+        }
+        
+        if (!registroEncontrado && alumno.horario) {
+          const claveEspecial = `${fechaCelda}_${alumno.horario}_${alumno.id}`;
+          if (asistencias[claveEspecial]) {
+            registroEncontrado = asistencias[claveEspecial];
+          }
+        }
+
+        let estadoStr = "-";
+        if (registroEncontrado?.estado === 'PRESENTE') estadoStr = "PRESENTE";
+        if (registroEncontrado?.estado === 'AUSENTE') estadoStr = "AUSENTE";
+
+        filaAlumno.push(estadoStr);
+      });
+
+      return filaAlumno;
+    });
+
+    // 3. Generamos y descargamos el archivo usando SheetJS
+    const datosExcel = [cabeceras, ...filas];
+    const hoja = XLSX.utils.aoa_to_sheet(datosExcel);
+    const libro = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(libro, hoja, "Asistencia Mensual");
+
+    const nombreMes = mesesAnio.find(m => m.valor === mesCuadrante).nombre;
+    const nombreArchivo = `Asistencia_${profesorActivo}_${nombreMes}_${anioCuadrante}.xlsx`;
+    
+    XLSX.writeFile(libro, nombreArchivo);
+  };
+
   const totalDiasMes = new Date(anioCuadrante, mesCuadrante, 0).getDate();
   const arregloDias = Array.from({ length: totalDiasMes }, (_, i) => i + 1);
 
-  // --- FILTRO INTELIGENTE ANTI-FANTASMAS ---
   const alumnosFiltrados = alumnos.filter(a => {
     if (a.profesor !== profesorActivo) return false;
-
-    // Si es un "alumno fantasma" creado en versiones antiguas sin datos, 
-    // LO MOSTRAMOS SIEMPRE para que puedas asignarle un horario o borrarlo.
     if (!a.horario || !a.dias) return true;
-
-    // Si está todo correcto, aplicamos los filtros normales
     const coincideHora = a.horario === horaSeleccionada;
     const coincideDia = a.dias === diaFiltroTabla || a.dias === 'L-M-X-J-V';
-
     return coincideHora && coincideDia;
   });
 
@@ -252,6 +307,7 @@ export default function App() {
   const tarjetaEstilo = { backgroundColor: '#1e293b', padding: '20px', borderRadius: '12px', border: '1px solid #334155' };
   const inputEstilo = { backgroundColor: '#0f172a', color: '#f8fafc', border: '1px solid #334155', padding: '10px', borderRadius: '8px', outline: 'none' };
   const botonNaranja = { backgroundColor: '#ff6b35', color: 'white', border: 'none', padding: '10px 15px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' };
+  const botonVerde = { backgroundColor: '#10b981', color: 'white', border: 'none', padding: '8px 12px', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer', fontSize: '13px' };
 
   return (
     <div style={{ backgroundColor: '#0f172a', minHeight: '100vh', color: '#f8fafc', padding: '20px', fontFamily: 'sans-serif' }}>
@@ -407,20 +463,28 @@ export default function App() {
                 </div>
               </div>
 
-              {/* CUADRANTE MENSUAL */}
+              {/* CUADRANTE MENSUAL CON EXPORTACIÓN */}
               <div style={tarjetaEstilo}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #334155', paddingBottom: '15px', marginBottom: '15px', flexWrap: 'wrap', gap: '10px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #334155', paddingBottom: '15px', marginBottom: '15px', flexWrap: 'wrap', gap: '15px' }}>
                   <div>
                     <h2 style={{ fontSize: '18px', fontWeight: 'bold', margin: 0 }}>📅 Cuadrante de Asistencia Mensual</h2>
                     <p style={{ color: '#94a3b8', fontSize: '12px', margin: '4px 0 0 0' }}>Muestra las asistencias generales sin importar la hora seleccionada arriba</p>
                   </div>
-                  <div style={{ display: 'flex', gap: '8px' }}>
-                    <select value={mesCuadrante} onChange={(e) => setMesCuadrante(parseInt(e.target.value))} style={inputEstilo}>
-                      {mesesAnio.map(m => <option key={m.valor} value={m.valor}>{m.nombre}</option>)}
-                    </select>
-                    <select value={anioCuadrante} onChange={(e) => setAnioCuadrante(parseInt(e.target.value))} style={inputEstilo}>
-                      {[2025, 2026, 2027, 2028].map(a => <option key={a} value={a}>{a}</option>)}
-                    </select>
+                  
+                  {/* SECCIÓN DERECHA: SELECTORES + BOTÓN DESCARGA EXCEL */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                    <button onClick={exportarExcelMensual} style={botonVerde} title="Descargar este mes en Excel">
+                      ⬇️ Descargar Excel
+                    </button>
+                    
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <select value={mesCuadrante} onChange={(e) => setMesCuadrante(parseInt(e.target.value))} style={inputEstilo}>
+                        {mesesAnio.map(m => <option key={m.valor} value={m.valor}>{m.nombre}</option>)}
+                      </select>
+                      <select value={anioCuadrante} onChange={(e) => setAnioCuadrante(parseInt(e.target.value))} style={inputEstilo}>
+                        {[2025, 2026, 2027, 2028].map(a => <option key={a} value={a}>{a}</option>)}
+                      </select>
+                    </div>
                   </div>
                 </div>
 
